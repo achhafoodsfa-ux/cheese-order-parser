@@ -15,3 +15,5 @@
 - [x] Accept image, PDF, and XLSX attachments in the unified input and identify each file type securely.
 - [x] Extract spreadsheet and PDF content for the AI parser while preserving the existing SAP rules.
 - [x] Verify the revised single-input experience and save a new checkpoint.
+- [x] Prevent malformed AI structured responses from surfacing raw JSON parsing errors for complex WhatsApp screenshots.
+- [x] Add automatic response validation and retry coverage for failed structured parses.

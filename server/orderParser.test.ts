@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCustomerSapBlock, formatSapLine, normalizeParsedOrder } from "./orderParser";
+import { formatCustomerSapBlock, formatSapLine, normalizeParsedOrder, parseValidatedModelResult } from "./orderParser";
 
 describe("SAP order formatting", () => {
   it("renders the exact SAP row with two, five, then two tabs", () => {
@@ -27,5 +27,16 @@ describe("customer separation", () => {
     expect(result.customers).toHaveLength(2);
     expect(result.customers[0].sapLines).toEqual([{ fgCode: "FG-01-0042", qtyPkts: 15, warehouse: "HO-WH", productGroup: "CHEESE" }]);
     expect(result.customers[1].sapLines).toEqual([{ fgCode: "FG-01-0042", qtyPkts: 8, warehouse: "HO-WH", productGroup: "CHEESE" }]);
+  });
+});
+
+describe("structured model-response recovery", () => {
+  it("does not throw when a model response contains unterminated JSON", () => {
+    expect(parseValidatedModelResult('{"customers":[{"customerName":"Furqan')).toBeNull();
+  });
+
+  it("accepts JSON wrapped in a markdown fence after validation", () => {
+    const content = '```json\n{"customers":[{"customerName":"Furqan AFPL","sapLines":[{"fgCode":"FG-03-0006","qtyPkts":15,"warehouse":"HO-WH","productGroup":"CHEESE"}],"warnings":[]}],"generalWarnings":[]}\n```';
+    expect(parseValidatedModelResult(content)?.customers[0]?.customerName).toBe("Furqan AFPL");
   });
 });

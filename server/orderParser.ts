@@ -121,6 +121,20 @@ export function normalizeParsedOrder(value: unknown): ParsedOrderResult {
   return { customers, generalWarnings: cleanWarnings(raw.generalWarnings) };
 }
 
+export function parseValidatedModelResult(content: unknown): ParsedOrderResult | null {
+  if (typeof content !== "string") return null;
+  const trimmed = content.trim().replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "");
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  try {
+    const result = normalizeParsedOrder(JSON.parse(trimmed.slice(start, end + 1)));
+    return result.customers.length > 0 ? result : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function parseOrderWithAi(input: { sourceText: string; attachment?: ParserAttachment; masterUrl: string }): Promise<ParsedOrderResult> {
   const officialMasterPrompt = await getOfficialMasterPrompt(input.masterUrl);
   const userContent: Array<
@@ -131,13 +145,11 @@ export async function parseOrderWithAi(input: { sourceText: string; attachment?:
   ];
   if (input.attachment?.kind === "image") userContent.push({ type: "image_url", image_url: { url: input.attachment.dataUrl, detail: "high" } });
 
-  const response = await invokeLLM({
-    model: "gemini-3-flash-preview",
-    messages: [
-      { role: "system", content: `${CHEESE_MASTER_PROMPT}\n\nCANONICAL OFFICIAL MASTER PROMPT — APPLY THIS IN FULL:\n${officialMasterPrompt}` },
-      { role: "user", content: userContent },
-    ],
-    response_format: {
+  const messages = [
+    { role: "system" as const, content: `${CHEESE_MASTER_PROMPT}\n\nCANONICAL OFFICIAL MASTER PROMPT — APPLY THIS IN FULL:\n${officialMasterPrompt}` },
+    { role: "user" as const, content: userContent },
+  ];
+  const responseFormat = {
       type: "json_schema",
       json_schema: {
         name: "sap_order_parse",
@@ -171,12 +183,18 @@ export async function parseOrderWithAi(input: { sourceText: string; attachment?:
           required: ["customers", "generalWarnings"], additionalProperties: false,
         },
       },
-    },
-  });
+  } as const;
 
-  const content = response.choices[0]?.message?.content;
-  if (typeof content !== "string") throw new Error("AI parser returned no structured result.");
-  const result = normalizeParsedOrder(JSON.parse(content));
-  if (result.customers.length === 0) throw new Error("No verified SAP order lines were found. Add clearer text or a sharper screenshot and try again.");
-  return result;
+  const requestStructuredParse = async (model: "gemini-3-flash-preview" | "gpt-5-mini") => {
+    const response = await invokeLLM({ model, messages, response_format: responseFormat, maxTokens: 8_000 });
+    return parseValidatedModelResult(response.choices[0]?.message?.content);
+  };
+
+  const primaryResult = await requestStructuredParse("gemini-3-flash-preview");
+  if (primaryResult) return primaryResult;
+
+  const retryResult = await requestStructuredParse("gpt-5-mini");
+  if (retryResult) return retryResult;
+
+  throw new Error("This order could not be safely read. Please resend a sharper screenshot or paste the text; no incomplete SAP order was created.");
 }
