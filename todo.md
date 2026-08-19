@@ -77,3 +77,6 @@
 - [x] Replace per-customer cards with a compact selected-route matrix: customers as rows and products as columns.
 - [x] Show only products ordered in the selected route, with per-customer quantities and a compact route total.
 - [x] Save a checkpoint for the tested one-page matrix layout against the supplied daily sales report.
+- [x] Add a Share as Image button for the currently selected route and category matrix.
+- [x] Generate a complete WhatsApp-ready matrix image with a share/download fallback.
+- [ ] Save a checkpoint for the tested image-share action.
