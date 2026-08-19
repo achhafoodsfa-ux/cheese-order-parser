@@ -7,6 +7,13 @@ const MAX_LINES_PER_CUSTOMER = 80;
 const MASTER_PROMPT_KEY = "Cheese_SAP_Master_Training_Prompt_V4_SAP_ACTUAL_FORMAT_ca7294e2.txt";
 let officialMasterCache: { content: string; expiresAt: number } | null = null;
 
+export type ParserAttachment = {
+  kind: "image";
+  filename: string;
+  mimeType: string;
+  dataUrl: string;
+};
+
 const CHEESE_MASTER_PROMPT = `
 You are the Cheese Distribution SAP Order Processing Assistant. Parse WhatsApp order text, Roman Urdu, English order notes, and WhatsApp screenshots into customer-separated SAP orders.
 
@@ -114,12 +121,15 @@ export function normalizeParsedOrder(value: unknown): ParsedOrderResult {
   return { customers, generalWarnings: cleanWarnings(raw.generalWarnings) };
 }
 
-export async function parseOrderWithAi(input: { sourceText: string; imageDataUrl?: string; masterUrl: string }): Promise<ParsedOrderResult> {
+export async function parseOrderWithAi(input: { sourceText: string; attachment?: ParserAttachment; masterUrl: string }): Promise<ParsedOrderResult> {
   const officialMasterPrompt = await getOfficialMasterPrompt(input.masterUrl);
-  const userContent: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string; detail: "high" } }> = [
-    { type: "text", text: `ORDER SOURCE TEXT:\n${input.sourceText || "No typed text supplied. Read the attached WhatsApp screenshot."}` },
+  const userContent: Array<
+    { type: "text"; text: string }
+    | { type: "image_url"; image_url: { url: string; detail: "high" } }
+  > = [
+    { type: "text", text: `ORDER SOURCE TEXT:\n${input.sourceText || "No typed text supplied. Read the attached order file."}` },
   ];
-  if (input.imageDataUrl) userContent.push({ type: "image_url", image_url: { url: input.imageDataUrl, detail: "high" } });
+  if (input.attachment?.kind === "image") userContent.push({ type: "image_url", image_url: { url: input.attachment.dataUrl, detail: "high" } });
 
   const response = await invokeLLM({
     model: "gemini-3-flash-preview",

@@ -11,3 +11,7 @@
 - [x] Add user-facing parse errors and ambiguity handling.
 - [x] Write and run Vitest coverage for SAP formatting and separation logic.
 - [x] Verify desktop and mobile rendering, then save a project checkpoint.
+- [x] Replace separate text and screenshot controls with one smart, Meta-AI-style order input box.
+- [x] Accept image, PDF, and XLSX attachments in the unified input and identify each file type securely.
+- [x] Extract spreadsheet and PDF content for the AI parser while preserving the existing SAP rules.
+- [x] Verify the revised single-input experience and save a new checkpoint.
