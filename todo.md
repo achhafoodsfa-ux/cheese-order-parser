@@ -96,4 +96,4 @@
 - [x] Recognize Broadway branch allocation sheets with KG quantities and a dated quantity column.
 - [x] Treat each non-zero Broadway branch as a separate customer order and skip zero-quantity branches.
 - [x] Convert Broadway KG values into the correct physical PCS/PKTS using the confirmed Broadway pack weight and official FG mapping.
-- [ ] Save a checkpoint for the tested Broadway branch-sheet parsing regression.
+- [x] Save a checkpoint for the tested Broadway branch-sheet parsing regression.
