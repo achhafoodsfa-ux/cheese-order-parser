@@ -85,4 +85,4 @@
 - [x] Save a checkpoint for the tested clipboard-copy action.
 - [x] Tighten the customer and product matrix columns for 30-plus customer routes.
 - [x] Increase header-row hierarchy while preserving readable product labels in the compact matrix.
-- [ ] Save a checkpoint for the tested high-density matrix layout.
+- [x] Save a checkpoint for the tested high-density matrix layout.
