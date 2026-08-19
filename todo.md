@@ -71,3 +71,6 @@
 - [x] Make route report cards large, concise, and screenshot-shareable for sales-officer confirmation.
 - [x] Detect customer categories from the uploaded sheet and add a category filter alongside the route filter.
 - [x] Test combined route-and-category filtering with the supplied daily sales report.
+- [x] Make the selected route the primary report view instead of showing multiple routes together.
+- [x] Present every selected-route customer and product in one consolidated, continuous share board.
+- [ ] Save a checkpoint for the tested single-route screenshot layout.
