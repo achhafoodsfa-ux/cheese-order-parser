@@ -73,4 +73,4 @@
 - [x] Test combined route-and-category filtering with the supplied daily sales report.
 - [x] Make the selected route the primary report view instead of showing multiple routes together.
 - [x] Present every selected-route customer and product in one consolidated, continuous share board.
-- [ ] Save a checkpoint for the tested single-route screenshot layout.
+- [x] Save a checkpoint for the tested single-route screenshot layout.
