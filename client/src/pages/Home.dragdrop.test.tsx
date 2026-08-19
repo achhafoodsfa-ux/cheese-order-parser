@@ -5,11 +5,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mutate = vi.fn();
 const invalidate = vi.fn();
+const saveMemory = vi.fn();
 
 vi.mock("@/lib/trpc", () => ({
   trpc: {
-    useUtils: () => ({ orders: { history: { invalidate } } }),
-    orders: { parse: { useMutation: () => ({ mutate, isPending: false, isError: false, error: null }) } },
+    useUtils: () => ({ orders: { history: { invalidate }, memory: { list: { invalidate } } } }),
+    orders: {
+      parse: { useMutation: () => ({ mutate, isPending: false, isError: false, error: null }) },
+      memory: {
+        list: { useQuery: () => ({ data: [] }) },
+        add: { useMutation: () => ({ mutate: saveMemory, isPending: false }) },
+      },
+    },
   },
 }));
 
@@ -18,7 +25,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 import Home from "./Home";
 
 describe("smart input drag-and-drop", () => {
-  beforeEach(() => { mutate.mockClear(); invalidate.mockClear(); });
+  beforeEach(() => { mutate.mockClear(); invalidate.mockClear(); saveMemory.mockClear(); });
 
   it("receives an XLSX file dropped from a downloads folder", async () => {
     render(<Home />);

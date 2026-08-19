@@ -23,6 +23,15 @@ export const orderSessions = mysqlTable("orderSessions", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+export const parserMemories = mysqlTable("parserMemories", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  instruction: text("instruction").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type OrderSession = typeof orderSessions.$inferSelect;
+export type ParserMemory = typeof parserMemories.$inferSelect;

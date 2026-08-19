@@ -139,7 +139,7 @@ export function needsFullMasterLookup(result: ParsedOrderResult | null): boolean
   return Boolean(result?.generalWarnings.some(warning => warning.includes("MASTER_LOOKUP_REQUIRED")));
 }
 
-export async function parseOrderWithAi(input: { sourceText: string; attachment?: ParserAttachment; masterUrl: string }): Promise<ParsedOrderResult> {
+export async function parseOrderWithAi(input: { sourceText: string; attachment?: ParserAttachment; masterUrl: string; learnedRules?: string[] }): Promise<ParsedOrderResult> {
   const userContent: Array<
     { type: "text"; text: string }
     | { type: "image_url"; image_url: { url: string; detail: "high" } }
@@ -189,8 +189,9 @@ export async function parseOrderWithAi(input: { sourceText: string; attachment?:
     const promptMode = useFullMaster
       ? `CANONICAL OFFICIAL MASTER PROMPT — APPLY THIS IN FULL:\n${officialMasterPrompt}`
       : "FAST PATH: Use the compact mappings above for common items. If any product requires a mapping not covered above, do not guess; include the exact warning token MASTER_LOOKUP_REQUIRED in generalWarnings so the system performs a full-master lookup.";
+    const durableMemory = input.learnedRules?.length ? `\n\nDURABLE USER-APPROVED PARSER MEMORY — apply these rules in future orders unless they conflict with the official product master or SAP formatting rules:\n${input.learnedRules.map((rule, index) => `${index + 1}. ${rule}`).join("\n")}` : "";
     const messages = [
-      { role: "system" as const, content: `${CHEESE_MASTER_PROMPT}\n\n${promptMode}` },
+      { role: "system" as const, content: `${CHEESE_MASTER_PROMPT}\n\n${promptMode}${durableMemory}` },
       { role: "user" as const, content: userContent },
     ];
     const response = await invokeLLM({ model, messages, response_format: responseFormat, maxTokens: useFullMaster ? 6_000 : 4_000 });

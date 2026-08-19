@@ -15,6 +15,13 @@
       "when": 1787141497084,
       "tag": "0001_wide_shinobi_shaw",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1787144462327,
+      "tag": "0002_unknown_shockwave",
+      "breakpoints": true
     }
   ]
 }

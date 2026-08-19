@@ -35,4 +35,12 @@ describe("AI structured-output retry", () => {
     await expect(parseOrderWithAi({ sourceText: "Furqan AFPL 3 ctn imp 70/30", masterUrl: "https://example.test/master" }))
       .rejects.toThrow("This order could not be safely read");
   });
+
+  it("includes user-approved durable rules in future parser instructions", async () => {
+    invokeLLM.mockResolvedValueOnce({ choices: [{ message: { content: validJson } }] });
+
+    await parseOrderWithAi({ sourceText: "Furqan AFPL 3 ctn imp 70/30", masterUrl: "https://example.test/master", learnedRules: ["Furqan AFPL uses approved imported 70/30 wording."] });
+
+    expect(invokeLLM.mock.calls[0]?.[0]?.messages[0]?.content).toContain("Furqan AFPL uses approved imported 70/30 wording.");
+  });
 });

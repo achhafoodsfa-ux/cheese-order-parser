@@ -1,6 +1,6 @@
 import { desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { type InsertUser, orderSessions, type OrderSession, users } from "../drizzle/schema";
+import { type InsertUser, orderSessions, type OrderSession, parserMemories, type ParserMemory, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -45,4 +45,28 @@ export async function listOrderSessions(userId: number): Promise<OrderSession[]>
   const db = await getDb();
   if (!db) return [];
   return db.select().from(orderSessions).where(eq(orderSessions.userId, userId)).orderBy(desc(orderSessions.createdAt)).limit(60);
+}
+
+export async function listParserMemories(userId: number): Promise<ParserMemory[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(parserMemories).where(eq(parserMemories.userId, userId)).orderBy(desc(parserMemories.updatedAt)).limit(80);
+}
+
+export async function createParserMemory(values: Omit<typeof parserMemories.$inferInsert, "id" | "createdAt" | "updatedAt">): Promise<ParserMemory | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.insert(parserMemories).values(values);
+  const id = Number(result[0].insertId);
+  const rows = await db.select().from(parserMemories).where(eq(parserMemories.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function deleteParserMemory(userId: number, id: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const rows = await db.select().from(parserMemories).where(eq(parserMemories.id, id)).limit(1);
+  if (rows[0]?.userId !== userId) return false;
+  await db.delete(parserMemories).where(eq(parserMemories.id, id));
+  return true;
 }

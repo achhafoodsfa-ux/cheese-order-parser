@@ -1,12 +1,13 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { customerSapRows, visibleSapLine } from "@/lib/sapFormat";
 import { trpc } from "@/lib/trpc";
 import type { ParsedCustomerOrder, ParsedOrderResult } from "@shared/orderTypes";
 import { Check, Clipboard, FileImage, FileSpreadsheet, FileText, Loader2, Paperclip, Send, Sparkles, X } from "lucide-react";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 type ParseScreenResult = ParsedOrderResult & { sessionId: number | null; createdAt: Date };
@@ -18,13 +19,29 @@ export default function Home() {
   const [attachment, setAttachment] = useState<PendingAttachment | null>(null);
   const [result, setResult] = useState<ParseScreenResult | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [newMemory, setNewMemory] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
   const utils = trpc.useUtils();
   const parse = trpc.orders.parse.useMutation({
-    onSuccess: async (parsed) => { setResult(parsed); await utils.orders.history.invalidate(); toast.success(`${parsed.customers.length} customer ${parsed.customers.length === 1 ? "order is" : "orders are"} ready.`); },
+    onSuccess: async (parsed) => { setProgress(100); setResult(parsed); await utils.orders.history.invalidate(); toast.success(`${parsed.customers.length} customer ${parsed.customers.length === 1 ? "order is" : "orders are"} ready.`); window.setTimeout(() => setProgress(0), 700); },
     onError: error => toast.error(error.message || "The order could not be parsed. Please try again."),
   });
+  const memories = trpc.orders.memory.list.useQuery();
+  const saveMemory = trpc.orders.memory.add.useMutation({
+    onSuccess: async () => { setNewMemory(""); await utils.orders.memory.list.invalidate(); toast.success("Rule saved. Future orders will use it."); },
+    onError: error => toast.error(error.message || "The rule could not be saved."),
+  });
+
+  useEffect(() => {
+    if (!parse.isPending) return;
+    setProgress(12);
+    const checkpoints = [32, 56, 74, 88];
+    let index = 0;
+    const timer = window.setInterval(() => { setProgress(current => Math.max(current, checkpoints[index++] ?? 88)); }, 850);
+    return () => window.clearInterval(timer);
+  }, [parse.isPending]);
 
   const selectAttachment = (file?: File) => {
     if (!file) return;
@@ -69,11 +86,13 @@ export default function Home() {
       <section aria-label="Order source" onDragEnter={handleDragEnter} onDragOver={event => event.preventDefault()} onDragLeave={handleDragLeave} onDrop={handleDrop} className="self-start rounded-[26px] border border-[#e4e4dd] bg-white p-5 shadow-[0_14px_45px_-32px_rgba(26,49,32,0.34)] sm:p-7">
         <div className={`relative rounded-[22px] border bg-[#fafbf8] p-2 shadow-inner transition focus-within:ring-4 focus-within:ring-[#dcebd0] ${isDragActive ? "border-[#6d9d5d] ring-4 ring-[#dcebd0]" : "border-[#d9ded5] focus-within:border-[#79a568]"}`}>
           {isDragActive && <div className="pointer-events-none absolute inset-2 z-20 flex flex-col items-center justify-center rounded-[17px] border-2 border-dashed border-[#6c995b] bg-[#eff8e7]/95 text-center shadow-sm"><Paperclip className="h-6 w-6 text-[#416c47]" /><p className="mt-2 text-sm font-semibold text-[#31583a]">Drop order file here</p><p className="mt-1 text-xs text-[#627c66]">Image, PDF, XLSX or XLS</p></div>}
+          {parse.isPending && <div className="absolute inset-2 z-30 flex flex-col items-center justify-center rounded-[17px] bg-[#f7fbf2]/95 px-8 text-center backdrop-blur-sm"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#e4f0d8] text-[#356b42]"><Loader2 className="h-5 w-5 animate-spin" /></div><p className="mt-4 text-sm font-semibold text-[#264b31]">Building SAP orders…</p><p className="mt-1 text-xs text-[#6b7c6d]">Reading file, separating customers, validating SAP lines</p><Progress value={progress} className="mt-5 h-2 w-full max-w-sm bg-[#dfe9d9]" /></div>}
           <Textarea id="order-text" value={sourceText} onChange={event => setSourceText(event.target.value)} onPaste={event => { const file = event.clipboardData.files[0]; if (file) { event.preventDefault(); selectAttachment(file); } }} placeholder={'Paste WhatsApp text here, or paste a screenshot.\n\nExample:\nBabar Ali\n4 ctn achha shred\nMF white 30'} className="min-h-[224px] resize-y border-0 bg-transparent p-4 font-mono text-[13px] leading-6 text-[#2b392e] placeholder:text-[#a2a9a1] focus-visible:ring-0" />
           <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.xlsx,.xls" className="hidden" onChange={event => selectAttachment(event.target.files?.[0])} />
           {attachment && <div className="mx-2 mb-2 flex items-center gap-3 rounded-xl border border-[#d5e5c9] bg-[#f3f8ed] p-2.5">{attachment.kind === "image" ? <img src={attachment.dataUrl} alt="Selected order attachment" className="h-10 w-10 rounded-lg object-cover" /> : <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-[#467752]">{attachment.kind === "pdf" ? <FileText className="h-5 w-5" /> : <FileSpreadsheet className="h-5 w-5" />}</div>}<div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{attachment.filename}</p><p className="mt-0.5 text-[11px] text-[#667867]">{attachment.kind === "xlsx" ? "Excel order data ready" : attachment.kind === "pdf" ? "PDF ready for parsing" : "Image ready for parsing"}</p></div><Button size="icon" variant="ghost" onClick={() => setAttachment(null)} className="h-8 w-8 rounded-lg text-[#6d776e] hover:bg-white hover:text-[#254f38]"><X className="h-4 w-4" /></Button></div>}
           <div className="flex items-center justify-between gap-3 border-t border-[#e4e8e0] px-2 pt-2"><Button type="button" variant="ghost" size="sm" onClick={() => inputRef.current?.click()} className="h-9 rounded-lg px-2.5 text-[#46614d] hover:bg-[#edf4e8]"><Paperclip className="mr-1.5 h-4 w-4" />Add file</Button><span className="hidden text-[11px] text-[#859087] sm:block">Image, PDF, XLSX or pasted text</span><Button onClick={runParse} disabled={parse.isPending || (!sourceText.trim() && !attachment)} size="icon" className="h-10 w-10 shrink-0 rounded-xl bg-[#124e37] text-white hover:bg-[#0e402e] disabled:bg-[#aeb8ae]">{parse.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}<span className="sr-only">Parse order</span></Button></div>
         </div>
+        <div className="mt-4 rounded-2xl border border-[#e1e8dc] bg-[#f8faf5] p-3.5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><p className="text-xs font-semibold text-[#35543c]">Teach parser permanently</p><p className="mt-0.5 text-[11px] text-[#748176]">Saved rules survive page reloads and future sessions.</p></div><div className="flex min-w-0 flex-1 gap-2"><input value={newMemory} onChange={event => setNewMemory(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && newMemory.trim().length >= 8) saveMemory.mutate({ instruction: newMemory.trim() }); }} placeholder="e.g. Customer X wants Top Cow yellow" className="h-9 min-w-0 flex-1 rounded-lg border border-[#d9e1d5] bg-white px-3 text-xs outline-none transition placeholder:text-[#9ba69b] focus:border-[#78a266] focus:ring-2 focus:ring-[#dcebd0]" /><Button type="button" size="sm" disabled={saveMemory.isPending || newMemory.trim().length < 8} onClick={() => saveMemory.mutate({ instruction: newMemory.trim() })} className="h-9 rounded-lg bg-[#24593a] px-3 text-xs hover:bg-[#1b482e]">Save</Button></div></div>{memories.data && memories.data.length > 0 && <p className="mt-2.5 truncate text-[11px] text-[#607663]">{memories.data.length} saved rule{memories.data.length === 1 ? "" : "s"} active · latest: {memories.data[0]?.instruction}</p>}</div>
         {parse.isError && <p className="mt-3 rounded-xl bg-[#fff1ed] px-3 py-2 text-xs leading-5 text-[#9b3b27]">{parse.error.message}</p>}
       </section>
 

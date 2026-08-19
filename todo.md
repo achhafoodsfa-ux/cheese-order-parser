@@ -21,3 +21,8 @@
 - [x] Reduce AI parsing latency without weakening SAP output validation.
 - [x] Add drag-and-drop file receiving for images, PDFs, XLSX, and XLS files in the smart input.
 - [x] Verify dropped files are accepted and the updated parser behavior is covered by tests.
+- [x] Persist approved order corrections as durable parser knowledge without relying on browser sessions.
+- [x] Apply saved corrections during future parsing while retaining the official master as the source of truth.
+- [x] Add a visible multi-step parsing progress animation to the smart input.
+- [x] Package and validate the Cheese SAP order parsing workflow as a reusable skill.
+- [x] Test the retained-knowledge and loading-state behavior, then save a checkpoint.

@@ -7,7 +7,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
-import { createOrderSession, getOrderSessionById, listOrderSessions } from "./db";
+import { createOrderSession, createParserMemory, deleteParserMemory, getOrderSessionById, listOrderSessions, listParserMemories } from "./db";
 import { parseOrderWithAi, type ParserAttachment } from "./orderParser";
 import { storagePut } from "./storage";
 
@@ -74,7 +74,8 @@ export const appRouter = router({
       const extractedFileText = kind === "xlsx" && input.attachment ? spreadsheetToOrderText(input.attachment.dataUrl, input.attachment.filename) : kind === "pdf" && input.attachment ? await pdfToOrderText(input.attachment.dataUrl, input.attachment.filename) : "";
       const sourceText = [input.sourceText.trim(), extractedFileText].filter(Boolean).join("\n\n");
       const parserAttachment: ParserAttachment | undefined = input.attachment && kind === "image" ? { kind, filename: input.attachment.filename, mimeType: input.attachment.mimeType, dataUrl: input.attachment.dataUrl } : undefined;
-      const parsed = await parseOrderWithAi({ sourceText, attachment: parserAttachment, masterUrl });
+      const learnedRules = (await listParserMemories(ctx.user.id)).map(memory => memory.instruction);
+      const parsed = await parseOrderWithAi({ sourceText, attachment: parserAttachment, masterUrl, learnedRules });
       const session = await createOrderSession({ userId: ctx.user.id, sourceText: input.sourceText.trim() || (input.attachment ? `Attached file: ${input.attachment.filename}` : null), sourceImageKey: sourceImageKey ?? null, sourceImageUrl: sourceImageUrl ?? null, customers: parsed.customers, generalWarnings: parsed.generalWarnings });
       return { ...parsed, sessionId: session?.id ?? null, createdAt: session?.createdAt ?? new Date() };
     }),
@@ -83,6 +84,19 @@ export const appRouter = router({
       const session = await getOrderSessionById(ctx.user.id, input.id);
       if (!session) throw new Error("Saved order not found.");
       return session;
+    }),
+    memory: router({
+      list: protectedProcedure.query(({ ctx }) => listParserMemories(ctx.user.id)),
+      add: protectedProcedure.input(z.object({ instruction: z.string().trim().min(8).max(1_200) })).mutation(async ({ ctx, input }) => {
+        const memory = await createParserMemory({ userId: ctx.user.id, instruction: input.instruction });
+        if (!memory) throw new Error("The rule could not be saved. Please try again.");
+        return memory;
+      }),
+      remove: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+        const removed = await deleteParserMemory(ctx.user.id, input.id);
+        if (!removed) throw new Error("Saved rule not found.");
+        return { success: true } as const;
+      }),
     }),
   }),
 });
