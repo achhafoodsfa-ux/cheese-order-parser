@@ -14,14 +14,22 @@ export async function copyImageToClipboard(blob: Blob, clipboard = navigator.cli
   return true;
 }
 
+export function getRouteMatrixImageLayout(customerCount: number, productCount: number) {
+  const dense = customerCount >= 30;
+  return {
+    dense,
+    customerWidth: dense ? 220 : 330,
+    unitsWidth: dense ? 60 : 84,
+    productWidth: dense ? Math.max(62, Math.min(82, Math.floor(1180 / productCount))) : Math.max(104, Math.min(138, Math.floor(1700 / productCount))),
+    headerHeight: dense ? 188 : 168,
+    rowHeight: dense ? 34 : 42,
+    footerHeight: dense ? 40 : 44,
+  };
+}
+
 export async function createRouteMatrixImage({ route, category, matrix }: { route: string; category: string; matrix: RouteMatrix }): Promise<Blob> {
   if (matrix.customers.length === 0 || matrix.products.length === 0) throw new Error("Select a route with customer products before creating an image.");
-  const customerWidth = 330;
-  const unitsWidth = 84;
-  const productWidth = Math.max(104, Math.min(138, Math.floor(1700 / matrix.products.length)));
-  const headerHeight = 168;
-  const rowHeight = 42;
-  const footerHeight = 44;
+  const { dense, customerWidth, unitsWidth, productWidth, headerHeight, rowHeight, footerHeight } = getRouteMatrixImageLayout(matrix.customers.length, matrix.products.length);
   const width = customerWidth + unitsWidth + matrix.products.length * productWidth;
   const height = headerHeight + (matrix.customers.length + 1) * rowHeight + footerHeight;
   const canvas = document.createElement("canvas");
@@ -42,12 +50,13 @@ export async function createRouteMatrixImage({ route, category, matrix }: { rout
   ctx.fillStyle = "#f4f8f1"; ctx.fillRect(0, 76, width, headerHeight - 76);
   text(`${matrix.customers.length} customers · ${matrix.products.length} ordered products · ${formatUnits(matrix.totalUnits)} total units`, 26, 101, "600 13px Arial", "#355a3d");
   text("Generated for WhatsApp confirmation — quantities are in units", 26, 126, "12px Arial", "#6c7c6f");
-  text("Customer", 14, 153, "700 11px Arial", "#254b30");
-  text("Units", customerWidth + unitsWidth / 2, 153, "700 10px Arial", "#254b30", "center");
+  const matrixHeaderY = headerHeight - 15;
+  text("Customer", 14, matrixHeaderY, dense ? "700 12px Arial" : "700 11px Arial", "#254b30");
+  text("Units", customerWidth + unitsWidth / 2, matrixHeaderY, dense ? "700 11px Arial" : "700 10px Arial", "#254b30", "center");
   let productX = customerWidth + unitsWidth;
   matrix.products.forEach(product => {
-    text((product.code ?? "").replace("FG-", ""), productX + productWidth / 2, 144, "700 9px Arial", "#53705a", "center");
-    text(trim(product.name.replace(/Mozzarella/gi, "Mozz").replace(/Cheddar/gi, "Chedd").replace(/Shredded/gi, "Shred"), 17), productX + productWidth / 2, 157, "700 9px Arial", "#254b30", "center");
+    text((product.code ?? "").replace("FG-", ""), productX + productWidth / 2, headerHeight - 33, dense ? "700 10px Arial" : "700 9px Arial", "#53705a", "center");
+    text(trim(product.name.replace(/Mozzarella/gi, "Mozz").replace(/Cheddar/gi, "Chedd").replace(/Shredded/gi, "Shred"), dense ? 13 : 17), productX + productWidth / 2, headerHeight - 16, dense ? "700 10px Arial" : "700 9px Arial", "#254b30", "center");
     productX += productWidth;
   });
   line(0, headerHeight, width, headerHeight, "#bcd2b9");
@@ -58,13 +67,13 @@ export async function createRouteMatrixImage({ route, category, matrix }: { rout
     const y = headerHeight + rowIndex * rowHeight;
     ctx.fillStyle = rowIndex % 2 === 0 ? "#ffffff" : "#f9fcf7"; ctx.fillRect(0, y, width, rowHeight);
     const quantities = new Map(customer.products.map(product => [product.code ?? product.name, product.quantity]));
-    text(trim(customer.customerName, 39), 14, y + 15, "700 11px Arial", "#203a27");
-    text(trim(`${customer.customerCode} · ${categoryLabel(customer.category)}`, 47), 14, y + 30, "9px Arial", "#6f806f");
-    text(formatUnits(customer.totalUnits), customerWidth + unitsWidth / 2, y + rowHeight / 2, "700 12px Arial", "#24583a", "center");
+    text(trim(customer.customerName, dense ? 27 : 39), 14, y + (dense ? 12 : 15), dense ? "700 10px Arial" : "700 11px Arial", "#203a27");
+    text(trim(`${customer.customerCode} · ${categoryLabel(customer.category)}`, dense ? 31 : 47), 14, y + (dense ? 25 : 30), dense ? "8px Arial" : "9px Arial", "#6f806f");
+    text(formatUnits(customer.totalUnits), customerWidth + unitsWidth / 2, y + rowHeight / 2, dense ? "700 11px Arial" : "700 12px Arial", "#24583a", "center");
     let cellX = customerWidth + unitsWidth;
     matrix.products.forEach(product => {
       const value = quantities.get(product.code ?? product.name) ?? 0;
-      text(value > 0 ? formatUnits(value) : "–", cellX + productWidth / 2, y + rowHeight / 2, value > 0 ? "700 12px Arial" : "11px Arial", value > 0 ? "#174f36" : "#b3beb1", "center");
+      text(value > 0 ? formatUnits(value) : "–", cellX + productWidth / 2, y + rowHeight / 2, value > 0 ? (dense ? "700 11px Arial" : "700 12px Arial") : (dense ? "10px Arial" : "11px Arial"), value > 0 ? "#174f36" : "#b3beb1", "center");
       line(cellX, y, cellX, y + rowHeight, "#e1e9de");
       cellX += productWidth;
     });

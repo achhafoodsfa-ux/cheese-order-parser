@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { copyImageToClipboard, createRouteMatrixImage, routeMatrixImageFileName } from "./routeMatrixImage";
+import { copyImageToClipboard, createRouteMatrixImage, getRouteMatrixImageLayout, routeMatrixImageFileName } from "./routeMatrixImage";
 
 const matrix = {
   customers: [{ id: "v1::alpha", route: "V1-Lahore", category: "CFS - Corporate", customerCode: "C001", customerName: "Alpha Foods", salesOrders: ["1001"], totalUnits: 5, products: [{ code: "FG-01-0006", name: "Achha Mozzarella Block 2 KG", quantity: 5 }] }],
@@ -30,5 +30,10 @@ describe("route matrix image sharing", () => {
     const ClipboardImageItem = class { constructor(public readonly items: Record<string, Blob>) {} } as unknown as typeof ClipboardItem;
     await expect(copyImageToClipboard(new Blob(["route"], { type: "image/png" }), { write } as Clipboard, ClipboardImageItem)).resolves.toBe(true);
     expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses tighter columns and a taller heading for 30-plus customer routes", () => {
+    expect(getRouteMatrixImageLayout(30, 17)).toMatchObject({ dense: true, customerWidth: 220, unitsWidth: 60, productWidth: 69, headerHeight: 188, rowHeight: 34 });
+    expect(getRouteMatrixImageLayout(20, 17)).toMatchObject({ dense: false, customerWidth: 330, unitsWidth: 84, headerHeight: 168, rowHeight: 42 });
   });
 });

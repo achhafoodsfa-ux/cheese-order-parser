@@ -83,3 +83,6 @@
 - [x] Replace Share as Image with a Copy as Image action for the current route matrix.
 - [x] Copy the generated PNG directly to the clipboard with a clear download fallback when clipboard images are unavailable.
 - [x] Save a checkpoint for the tested clipboard-copy action.
+- [x] Tighten the customer and product matrix columns for 30-plus customer routes.
+- [x] Increase header-row hierarchy while preserving readable product labels in the compact matrix.
+- [ ] Save a checkpoint for the tested high-density matrix layout.
