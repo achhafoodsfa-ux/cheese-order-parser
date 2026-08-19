@@ -9,6 +9,7 @@ export type ParsedCustomerOrder = {
   customerName: string;
   sapLines: SapLine[];
   warnings: string[];
+  placementRoute?: string;
 };
 
 export type DetectedOrderBubble = {

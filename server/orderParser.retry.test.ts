@@ -4,7 +4,7 @@ const { invokeLLM } = vi.hoisted(() => ({ invokeLLM: vi.fn() }));
 
 vi.mock("./_core/llm", () => ({ invokeLLM }));
 
-import { parseOrderWithAi } from "./orderParser";
+import { formatCustomerSapBlock, parseOrderWithAi } from "./orderParser";
 
 const validJson = JSON.stringify({
   customers: [{ customerName: "Furqan AFPL", sapLines: [{ fgCode: "FG-03-0006", qtyPkts: 15, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] }],
@@ -83,5 +83,32 @@ describe("AI structured-output retry", () => {
     expect(result.customers[3]?.warnings[0]).toContain("Order captured from the screenshot");
     expect(invokeLLM.mock.calls[0]?.[0]?.messages[0]?.content).toContain("including the final bubble at the bottom");
     expect(invokeLLM.mock.calls[0]?.[0]?.messages[1]?.content[1]?.image_url.detail).toBe("high");
+  });
+
+  it("removes a quoted preview duplicate and keeps V1/V5 outside unchanged strict SAP rows", async () => {
+    const quotedReplyResult = JSON.stringify({
+      customers: [
+        { customerName: "Akraam Store gulbarg", sapLines: [{ fgCode: "FG-03-0018", qtyPkts: 15, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [], placementRoute: "" },
+        { customerName: "Akraam Store gulbarg", sapLines: [{ fgCode: "FG-03-0018", qtyPkts: 15, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [], placementRoute: "Please add in V1" },
+        { customerName: "Hanif trader", sapLines: [{ fgCode: "FG-03-0018", qtyPkts: 10, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [], placementRoute: "Please add in V5" },
+      ],
+      generalWarnings: [],
+      detectedBubbles: [
+        { customerName: "Akraam Store gulbarg", rawOrderText: "3 CTN 70/30 local" },
+        { customerName: "Akraam Store gulbarg", rawOrderText: "3 CTN 70/30 local" },
+        { customerName: "Hanif trader", rawOrderText: "Local 70 30 2 ctn" },
+      ],
+    });
+    invokeLLM.mockResolvedValueOnce({ choices: [{ message: { content: quotedReplyResult } }] });
+
+    const result = await parseOrderWithAi({ sourceText: "", attachment: { kind: "image", filename: "quoted-orders.png", mimeType: "image/png", dataUrl: "data:image/png;base64,AA==" }, masterUrl: "https://example.test/master" });
+
+    expect(result.customers).toHaveLength(2);
+    expect(result.customers[0]).toMatchObject({ customerName: "Akraam Store gulbarg", placementRoute: "V1" });
+    expect(result.customers[1]).toMatchObject({ customerName: "Hanif trader", placementRoute: "V5" });
+    expect(result.detectedBubbles).toHaveLength(2);
+    expect(formatCustomerSapBlock(result.customers[0]!)).toBe("FG-03-0018\t\t15\t\t\t\t\tHO-WH\t\tCHEESE");
+    expect(formatCustomerSapBlock(result.customers[1]!)).toBe("FG-03-0018\t\t10\t\t\t\t\tHO-WH\t\tCHEESE");
+    expect(invokeLLM.mock.calls[0]?.[0]?.messages[0]?.content).toContain("quoted/replied preview");
   });
 });

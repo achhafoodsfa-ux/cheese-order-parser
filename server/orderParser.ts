@@ -46,6 +46,12 @@ WHATSAPP SCREENSHOT READING — NON-NEGOTIABLE:
 - Read each bubble's customer name and every product row independently. Ignore WhatsApp timestamps, star icons, and sender separators such as "Nadeem Sb", but do not ignore the message bubble immediately below a sender separator.
 - If a bubble has a readable customer and order text but an uncertain FG code, preserve that customer as a separate result with a concise warning rather than silently dropping the entire final order.
 
+WHATSAPP REPLIES, QUOTES, AND PLACEMENT NOTES — NON-NEGOTIABLE:
+- A quoted/replied preview inside a WhatsApp bubble is context only. It can repeat an earlier customer and product text; never create a second customer order from the quoted preview.
+- Read the actual message content below or beside the quote as the operative message. A short reply such as "Please add in V1" or "Please add in V5" is a placement instruction, not a product order and not a new customer.
+- Attach an unambiguous V-number placement instruction to the customer order it replies to or directly follows. Return it in placementRoute as exactly V1, V5, etc. If the screenshot makes the attachment ambiguous, keep the original order separate and add a concise warning rather than guessing.
+- placementRoute is display-only metadata outside SAP rows. Never put V1/V5 inside fgCode, qtyPkts, warehouse, productGroup, a formatted SAP line, or a customer name. Warehouse remains HO-WH unless a genuine warehouse instruction is explicit.
+
 OFFICIAL HIGH-FREQUENCY MASTER MAPPINGS (check exact weight, style, colour and packaging):
 - Achha Mozzarella Shredded White 2KG unbranded: FG-01-0042, normally 10 PCS/CTN.
 - Achha Mozzarella Shredded Yellow 1KG: FG-01-0053.
@@ -111,14 +117,24 @@ function cleanWarnings(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string").map(item => item.trim()).filter(Boolean).slice(0, 8);
 }
 
+export function normalizePlacementRoute(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const match = value.toUpperCase().match(/\bV\s*([1-9]\d*)\b/);
+  return match ? `V${match[1]}` : undefined;
+}
+
 function normalizeDetectedBubbles(value: unknown): DetectedOrderBubble[] {
   if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
   return value.flatMap((item) => {
     if (!item || typeof item !== "object") return [];
     const raw = item as Record<string, unknown>;
     const customerName = typeof raw.customerName === "string" ? raw.customerName.trim() : "";
     const rawOrderText = typeof raw.rawOrderText === "string" ? raw.rawOrderText.trim() : "";
-    return customerName && rawOrderText ? [{ customerName, rawOrderText }] : [];
+    const key = `${normalizeCustomerKey(customerName)}::${rawOrderText.toLowerCase().replace(/\s+/g, " ")}`;
+    if (!customerName || !rawOrderText || seen.has(key)) return [];
+    seen.add(key);
+    return [{ customerName, rawOrderText }];
   }).slice(0, MAX_CUSTOMERS);
 }
 
@@ -151,13 +167,26 @@ export function normalizeParsedOrder(value: unknown): ParsedOrderResult {
     });
     const warnings = cleanWarnings(customer.warnings);
     if (!customerName || (mergedLines.size === 0 && warnings.length === 0)) return [];
-    return [{ customerName, sapLines: Array.from(mergedLines.values()), warnings }];
+    return [{ customerName, sapLines: Array.from(mergedLines.values()), warnings, placementRoute: normalizePlacementRoute(customer.placementRoute) }];
   });
 
+  const customersWithoutQuotedDuplicates = customers.reduce<ParsedCustomerOrder[]>((deduped, customer) => {
+    const fingerprint = `${normalizeCustomerKey(customer.customerName)}::${customer.sapLines.map(line => `${line.fgCode}:${line.qtyPkts}:${line.warehouse}:${line.productGroup}`).sort().join("|")}`;
+    const duplicateIndex = deduped.findIndex(existing => `${normalizeCustomerKey(existing.customerName)}::${existing.sapLines.map(line => `${line.fgCode}:${line.qtyPkts}:${line.warehouse}:${line.productGroup}`).sort().join("|")}` === fingerprint);
+    if (duplicateIndex < 0) return [...deduped, customer];
+    const existing = deduped[duplicateIndex]!;
+    const replacement = {
+      ...existing,
+      warnings: Array.from(new Set([...existing.warnings, ...customer.warnings])),
+      placementRoute: existing.placementRoute || customer.placementRoute,
+    };
+    return deduped.map((item, index) => index === duplicateIndex ? replacement : item);
+  }, []);
+
   const detectedBubbles = normalizeDetectedBubbles(raw.detectedBubbles);
-  const customerKeys = new Set(customers.map(customer => normalizeCustomerKey(customer.customerName)));
+  const customerKeys = new Set(customersWithoutQuotedDuplicates.map(customer => normalizeCustomerKey(customer.customerName)));
   const preservedMissingBubbles = detectedBubbles.flatMap((bubble) => customerKeys.has(normalizeCustomerKey(bubble.customerName)) ? [] : [{ customerName: bubble.customerName, sapLines: [], warnings: ["Order captured from the screenshot, but product matching needs verification before SAP rows can be created."] }]);
-  return { customers: [...customers, ...preservedMissingBubbles], generalWarnings: cleanWarnings(raw.generalWarnings), detectedBubbles };
+  return { customers: [...customersWithoutQuotedDuplicates, ...preservedMissingBubbles], generalWarnings: cleanWarnings(raw.generalWarnings), detectedBubbles };
 }
 
 export function parseValidatedModelResult(content: unknown): ParsedOrderResult | null {
@@ -323,8 +352,9 @@ export async function parseOrderWithAi(input: { sourceText: string; attachment?:
                     },
                   },
                   warnings: { type: "array", items: { type: "string" } },
+                  placementRoute: { type: "string" },
                 },
-                required: ["customerName", "sapLines", "warnings"], additionalProperties: false,
+                required: ["customerName", "sapLines", "warnings", "placementRoute"], additionalProperties: false,
               },
             },
             generalWarnings: { type: "array", items: { type: "string" } },

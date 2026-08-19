@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateLocal7030PktQuantity, enforceAchhaMozBlockPhysicalQuantity, enforceLocal7030ShreddedQuantity, enforcePizzaCheddarBlockPhysicalQuantity, extractLocal7030ShreddedTargets, formatCustomerSapBlock, formatSapLine, identifyPizzaCheddarBlock, needsFullMasterLookup, normalizeParsedOrder, parseValidatedModelResult, recognizeAchhaMozBlockPhysicalQty, recognizeLocal7030CartonPkts, recognizePizzaCheddarBlockPhysicalQty } from "./orderParser";
+import { calculateLocal7030PktQuantity, enforceAchhaMozBlockPhysicalQuantity, enforceLocal7030ShreddedQuantity, enforcePizzaCheddarBlockPhysicalQuantity, extractLocal7030ShreddedTargets, formatCustomerSapBlock, formatSapLine, identifyPizzaCheddarBlock, needsFullMasterLookup, normalizeParsedOrder, normalizePlacementRoute, parseValidatedModelResult, recognizeAchhaMozBlockPhysicalQty, recognizeLocal7030CartonPkts, recognizePizzaCheddarBlockPhysicalQty } from "./orderParser";
 
 describe("SAP order formatting", () => {
   it("renders the exact SAP row with two, five, then two tabs", () => {
@@ -78,6 +78,30 @@ describe("WhatsApp customer bubble preservation", () => {
   it("keeps a readable customer with a warning instead of silently dropping a missed final order", () => {
     const normalized = normalizeParsedOrder({ customers: [], generalWarnings: [], detectedBubbles: [{ customerName: "Nadeem Sb", rawOrderText: "EO Food 25 ctn UK Shredd" }] });
     expect(normalized.customers).toEqual([{ customerName: "Nadeem Sb", sapLines: [], warnings: ["Order captured from the screenshot, but product matching needs verification before SAP rows can be created."] }]);
+  });
+
+  it("keeps quoted order text from duplicating a customer and preserves its V-number outside strict SAP rows", () => {
+    const line = (qtyPkts: number) => ({ fgCode: "FG-03-0018", qtyPkts, warehouse: "HO-WH", productGroup: "CHEESE" });
+    const parsed = normalizeParsedOrder({
+      customers: [
+        { customerName: "Akraam Store Gulberg", sapLines: [line(15)], warnings: [], placementRoute: "" },
+        { customerName: "Akraam Store Gulberg", sapLines: [line(15)], warnings: [], placementRoute: "Please add in V1" },
+        { customerName: "Hanif trader", sapLines: [line(10)], warnings: [], placementRoute: "V5" },
+      ],
+      detectedBubbles: [
+        { customerName: "Akraam Store Gulberg", rawOrderText: "3 CTN 70/30 local" },
+        { customerName: "Akraam Store Gulberg", rawOrderText: "3 CTN 70/30 local" },
+        { customerName: "Hanif trader", rawOrderText: "Local 70 30 2 ctn" },
+      ],
+      generalWarnings: [],
+    });
+    expect(parsed.customers).toEqual([
+      { customerName: "Akraam Store Gulberg", sapLines: [line(15)], warnings: [], placementRoute: "V1" },
+      { customerName: "Hanif trader", sapLines: [line(10)], warnings: [], placementRoute: "V5" },
+    ]);
+    expect(parsed.detectedBubbles).toHaveLength(2);
+    expect(formatCustomerSapBlock(parsed.customers[0]!)).toBe("FG-03-0018\t\t15\t\t\t\t\tHO-WH\t\tCHEESE");
+    expect(normalizePlacementRoute("please add in v 12")).toBe("V12");
   });
 });
 
