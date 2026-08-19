@@ -8,6 +8,12 @@ export function routeMatrixImageFileName(route: string, category: string) {
   return `route-matrix-${safe || "report"}.png`;
 }
 
+export async function copyImageToClipboard(blob: Blob, clipboard = navigator.clipboard, ClipboardImageItem = window.ClipboardItem) {
+  if (!clipboard?.write || !ClipboardImageItem) return false;
+  await clipboard.write([new ClipboardImageItem({ "image/png": blob })]);
+  return true;
+}
+
 export async function createRouteMatrixImage({ route, category, matrix }: { route: string; category: string; matrix: RouteMatrix }): Promise<Blob> {
   if (matrix.customers.length === 0 || matrix.products.length === 0) throw new Error("Select a route with customer products before creating an image.");
   const customerWidth = 330;

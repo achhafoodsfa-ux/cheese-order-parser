@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createRouteMatrixImage, routeMatrixImageFileName } from "./routeMatrixImage";
+import { copyImageToClipboard, createRouteMatrixImage, routeMatrixImageFileName } from "./routeMatrixImage";
 
 const matrix = {
   customers: [{ id: "v1::alpha", route: "V1-Lahore", category: "CFS - Corporate", customerCode: "C001", customerName: "Alpha Foods", salesOrders: ["1001"], totalUnits: 5, products: [{ code: "FG-01-0006", name: "Achha Mozzarella Block 2 KG", quantity: 5 }] }],
@@ -23,5 +23,12 @@ describe("route matrix image sharing", () => {
     const blob = await createRouteMatrixImage({ route: "V1-Lahore", category: "CFS - Corporate", matrix });
     expect(blob.type).toBe("image/png");
     expect(context.fillText).toHaveBeenCalledWith("V1-Lahore", 26, 51);
+  });
+
+  it("copies the generated PNG through the browser clipboard image API", async () => {
+    const write = vi.fn().mockResolvedValue(undefined);
+    const ClipboardImageItem = class { constructor(public readonly items: Record<string, Blob>) {} } as unknown as typeof ClipboardItem;
+    await expect(copyImageToClipboard(new Blob(["route"], { type: "image/png" }), { write } as Clipboard, ClipboardImageItem)).resolves.toBe(true);
+    expect(write).toHaveBeenCalledTimes(1);
   });
 });

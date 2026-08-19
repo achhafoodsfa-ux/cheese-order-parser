@@ -80,3 +80,6 @@
 - [x] Add a Share as Image button for the currently selected route and category matrix.
 - [x] Generate a complete WhatsApp-ready matrix image with a share/download fallback.
 - [x] Save a checkpoint for the tested image-share action.
+- [x] Replace Share as Image with a Copy as Image action for the current route matrix.
+- [x] Copy the generated PNG directly to the clipboard with a clear download fallback when clipboard images are unavailable.
+- [ ] Save a checkpoint for the tested clipboard-copy action.
