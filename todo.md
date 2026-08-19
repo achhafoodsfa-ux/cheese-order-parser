@@ -79,4 +79,4 @@
 - [x] Save a checkpoint for the tested one-page matrix layout against the supplied daily sales report.
 - [x] Add a Share as Image button for the currently selected route and category matrix.
 - [x] Generate a complete WhatsApp-ready matrix image with a share/download fallback.
-- [ ] Save a checkpoint for the tested image-share action.
+- [x] Save a checkpoint for the tested image-share action.
