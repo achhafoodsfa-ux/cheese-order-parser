@@ -111,4 +111,28 @@ describe("AI structured-output retry", () => {
     expect(formatCustomerSapBlock(result.customers[1]!)).toBe("FG-03-0018\t\t10\t\t\t\t\tHO-WH\t\tCHEESE");
     expect(invokeLLM.mock.calls[0]?.[0]?.messages[0]?.content).toContain("quoted/replied preview");
   });
+
+  it("creates separate non-zero Broadway branch orders and converts KG into 2KG physical packets", async () => {
+    const broadwaySheet = JSON.stringify({
+      customers: [
+        { customerName: "Dha y Block", sapLines: [{ fgCode: "FG-02-0035", qtyPkts: 11, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [], placementRoute: "" },
+        { customerName: "Johar", sapLines: [{ fgCode: "FG-02-0035", qtyPkts: 13, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [], placementRoute: "" },
+        { customerName: "Kohinoor City Fsd", sapLines: [{ fgCode: "FG-02-0035", qtyPkts: 0, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [], placementRoute: "" },
+      ],
+      generalWarnings: [],
+      detectedBubbles: [
+        { customerName: "Dha y Block", rawOrderText: "Broadway | Dha y Block | KG | 110 | 11 CTN" },
+        { customerName: "Johar", rawOrderText: "Broadway | Johar | KG | 130 | 13 CTN" },
+        { customerName: "Kohinoor City Fsd", rawOrderText: "Broadway | Kohinoor City Fsd | KG | 0 | 0 CTN" },
+      ],
+    });
+    invokeLLM.mockResolvedValueOnce({ choices: [{ message: { content: broadwaySheet } }] });
+
+    const result = await parseOrderWithAi({ sourceText: "", attachment: { kind: "image", filename: "broadway-branches.png", mimeType: "image/png", dataUrl: "data:image/png;base64,AA==" }, masterUrl: "https://example.test/master" });
+
+    expect(result.customers.map(customer => customer.customerName)).toEqual(["Dha y Block", "Johar"]);
+    expect(result.customers.map(customer => customer.sapLines[0]?.qtyPkts)).toEqual([55, 65]);
+    expect(result.customers.some(customer => /kohinoor|multan/i.test(customer.customerName))).toBe(false);
+    expect(invokeLLM.mock.calls[0]?.[0]?.messages[0]?.content).toContain("BROADWAY MULTI-BRANCH KG ALLOCATION SHEETS");
+  });
 });

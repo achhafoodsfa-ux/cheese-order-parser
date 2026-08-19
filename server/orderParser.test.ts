@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateLocal7030PktQuantity, enforceAchhaMozBlockPhysicalQuantity, enforceLocal7030ShreddedQuantity, enforcePizzaCheddarBlockPhysicalQuantity, extractLocal7030ShreddedTargets, formatCustomerSapBlock, formatSapLine, identifyPizzaCheddarBlock, needsFullMasterLookup, normalizeParsedOrder, normalizePlacementRoute, parseValidatedModelResult, recognizeAchhaMozBlockPhysicalQty, recognizeLocal7030CartonPkts, recognizePizzaCheddarBlockPhysicalQty } from "./orderParser";
+import { calculateBroadway2KgPieces, calculateLocal7030PktQuantity, enforceAchhaMozBlockPhysicalQuantity, enforceBroadwayBranchQuantities, enforceLocal7030ShreddedQuantity, enforcePizzaCheddarBlockPhysicalQuantity, extractLocal7030ShreddedTargets, formatCustomerSapBlock, formatSapLine, identifyPizzaCheddarBlock, needsFullMasterLookup, normalizeParsedOrder, normalizePlacementRoute, parseValidatedModelResult, recognizeAchhaMozBlockPhysicalQty, recognizeLocal7030CartonPkts, recognizePizzaCheddarBlockPhysicalQty } from "./orderParser";
 
 describe("SAP order formatting", () => {
   it("renders the exact SAP row with two, five, then two tabs", () => {
@@ -122,5 +122,30 @@ describe("Pizza Cheddar Block recognition", () => {
     expect(identifyPizzaCheddarBlock("Pizza Chadder blk 5 pcs")).toEqual({ fgCode: "FG-02-0006", qtyPkts: 5 });
     const corrected = enforcePizzaCheddarBlockPhysicalQuantity({ customers: [{ customerName: "Baba Latif Johar town", sapLines: [{ fgCode: "FG-01-0042", qtyPkts: 20, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] }], generalWarnings: [], detectedBubbles: [{ customerName: "Baba Latif Johar town", rawOrderText: "Pizza Chadder blk 5 pcs" }] }, "");
     expect(corrected.customers[0]?.sapLines).toContainEqual({ fgCode: "FG-02-0006", qtyPkts: 5, warehouse: "HO-WH", productGroup: "CHEESE" });
+  });
+});
+
+describe("Broadway multi-branch KG allocations", () => {
+  it("converts the 2KG Broadway KG or carton allocation to physical packets", () => {
+    expect(calculateBroadway2KgPieces("Broadway | DHA Y Block | KG | 110 | 11 CTN")).toBe(55);
+    expect(calculateBroadway2KgPieces("Broadway Johar 130 KG")).toBe(65);
+    expect(calculateBroadway2KgPieces("DHA Y Block | KG | 110 | 11 CTN")).toBeUndefined();
+  });
+
+  it("keeps each non-zero Broadway branch separate and corrects its PKT quantity from the raw allocation row", () => {
+    const result = enforceBroadwayBranchQuantities({
+      customers: [
+        { customerName: "Dha y Block", sapLines: [{ fgCode: "FG-02-0035", qtyPkts: 11, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] },
+        { customerName: "Johar", sapLines: [{ fgCode: "FG-02-0035", qtyPkts: 13, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] },
+      ],
+      generalWarnings: [],
+      detectedBubbles: [
+        { customerName: "Dha y Block", rawOrderText: "Broadway | Dha y Block | KG | 110 | 11 CTN" },
+        { customerName: "Johar", rawOrderText: "Broadway | Johar | KG | 130 | 13 CTN" },
+      ],
+    }, "");
+    expect(result.customers).toHaveLength(2);
+    expect(result.customers.map(customer => customer.sapLines[0]?.qtyPkts)).toEqual([55, 65]);
+    expect(formatCustomerSapBlock(result.customers[0]!)).toBe("FG-02-0035\t\t55\t\t\t\t\tHO-WH\t\tCHEESE");
   });
 });

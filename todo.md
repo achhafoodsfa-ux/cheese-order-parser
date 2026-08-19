@@ -93,3 +93,7 @@
 - [x] Add a mocked end-to-end screenshot parse proving quoted previews do not create a duplicate customer order.
 - [x] Deduplicate identical quoted customer SAP results even when no placement route is returned.
 - [x] Add an end-to-end V1/V5 regression proving the correct customer receives placement metadata while SAP rows remain unchanged.
+- [x] Recognize Broadway branch allocation sheets with KG quantities and a dated quantity column.
+- [x] Treat each non-zero Broadway branch as a separate customer order and skip zero-quantity branches.
+- [x] Convert Broadway KG values into the correct physical PCS/PKTS using the confirmed Broadway pack weight and official FG mapping.
+- [ ] Save a checkpoint for the tested Broadway branch-sheet parsing regression.

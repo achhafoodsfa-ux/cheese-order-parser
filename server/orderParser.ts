@@ -91,6 +91,13 @@ LOCAL 70/30 PRODUCT-FIRST RECOGNITION — apply before CTN conversion:
 - For Local 70/30 Block, use 10 PKTS per CTN/box. For Local 70/30 Slices, use 18 PKTS per CTN/box.
 - Never report an unknown carton ratio for a recognized Local 70/30 Shredded, Block, or Slice order. Recognize the style first, then apply its carton rule. Keep customer blocks separate.
 
+BROADWAY MULTI-BRANCH KG ALLOCATION SHEETS — NON-NEGOTIABLE:
+- A Broadway allocation sheet has branch names in rows, UOM=KG, a KG amount (often under P.O Order), and sometimes a dated allocation column in CTNs. Treat every non-zero branch row as one separate customer order. A regional header such as Lahore is a section label, not a customer.
+- Skip every zero-quantity branch completely; do not create a SAP order, warning, or detected bubble for a zero row.
+- Broadway Mozzarella Shredded is the official 2KG item FG-02-0035. Convert its KG allocation to physical PKTS as KG divided by 2. If a dated CTN allocation is visible instead, use CTN multiplied by 5 PKTS. These must agree because one Broadway carton is 5 × 2KG = 10KG.
+- Example: DHA Y Block | KG | 110 | 11 CTN produces a separate DHA Y Block order with FG-02-0035 and exactly 55 PKTS. Johar | KG | 130 | 13 CTN produces exactly 65 PKTS.
+- Preserve each branch row in detectedBubbles using the branch name and the full non-zero row text prefixed with Broadway. Never merge branches, even if all branches order the same FG code.
+
 For a matching official master entry, do not invent, alter, or correct an FG code from memory. Preserve customer-level separation through final validation. Return all answer fields in English or Roman Urdu as appropriate, but maintain SAP values exactly.
 `;
 
@@ -121,6 +128,11 @@ export function normalizePlacementRoute(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const match = value.toUpperCase().match(/\bV\s*([1-9]\d*)\b/);
   return match ? `V${match[1]}` : undefined;
+}
+
+function isZeroBroadwayAllocationRow(value: string): boolean {
+  const normalized = value.toLowerCase().replace(/\s+/g, " ");
+  return /\bbroadway\b/.test(normalized) && /\bkg\b\s*[:|,-]?\s*0(?:\.0+)?\b/.test(normalized);
 }
 
 function normalizeDetectedBubbles(value: unknown): DetectedOrderBubble[] {
@@ -185,7 +197,7 @@ export function normalizeParsedOrder(value: unknown): ParsedOrderResult {
 
   const detectedBubbles = normalizeDetectedBubbles(raw.detectedBubbles);
   const customerKeys = new Set(customersWithoutQuotedDuplicates.map(customer => normalizeCustomerKey(customer.customerName)));
-  const preservedMissingBubbles = detectedBubbles.flatMap((bubble) => customerKeys.has(normalizeCustomerKey(bubble.customerName)) ? [] : [{ customerName: bubble.customerName, sapLines: [], warnings: ["Order captured from the screenshot, but product matching needs verification before SAP rows can be created."] }]);
+  const preservedMissingBubbles = detectedBubbles.flatMap((bubble) => customerKeys.has(normalizeCustomerKey(bubble.customerName)) || isZeroBroadwayAllocationRow(bubble.rawOrderText) ? [] : [{ customerName: bubble.customerName, sapLines: [], warnings: ["Order captured from the screenshot, but product matching needs verification before SAP rows can be created."] }]);
   return { customers: [...customersWithoutQuotedDuplicates, ...preservedMissingBubbles], generalWarnings: cleanWarnings(raw.generalWarnings), detectedBubbles };
 }
 
@@ -221,6 +233,17 @@ export function calculateLocal7030PktQuantity(sourceText: string): number | unde
   const cartonMatch = localLine.match(/\b(\d+)\s*(?:ctn|carton|box)\b/i);
   if (!ratio || !cartonMatch) return undefined;
   return Number(cartonMatch[1]) * ratio;
+}
+
+export function calculateBroadway2KgPieces(sourceText: string, knownBroadwayLine = false): number | undefined {
+  const normalized = sourceText.toLowerCase().replace(/\s+/g, " ");
+  if (!knownBroadwayLine && !/broadway|fg-02-0035/.test(normalized)) return undefined;
+  const kgMatch = normalized.match(/\b(\d+(?:\.\d+)?)\s*kg\b|\bkg\b\s*[:|,-]?\s*(\d+(?:\.\d+)?)/i);
+  const kg = Number(kgMatch?.[1] || kgMatch?.[2]);
+  if (Number.isFinite(kg) && kg > 0 && Number.isInteger(kg / 2)) return kg / 2;
+  const cartonMatch = normalized.match(/\b(\d+)\s*(?:ctn|carton)s?\b/i);
+  const cartons = Number(cartonMatch?.[1]);
+  return Number.isInteger(cartons) && cartons > 0 ? cartons * 5 : undefined;
 }
 
 type Local7030Target = { customerName?: string; qtyPkts: number };
@@ -313,6 +336,22 @@ export function enforceLocal7030ShreddedQuantity(result: ParsedOrderResult, sour
   };
 }
 
+export function enforceBroadwayBranchQuantities(result: ParsedOrderResult, sourceText: string): ParsedOrderResult {
+  const bubbleTextByCustomer = new Map(result.detectedBubbles.map(bubble => [normalizeCustomerKey(bubble.customerName), bubble.rawOrderText]));
+  return {
+    ...result,
+    customers: result.customers.map(customer => {
+      const relevantText = bubbleTextByCustomer.get(normalizeCustomerKey(customer.customerName)) || sourceText;
+      const hasBroadwayLine = customer.sapLines.some(line => line.fgCode === "FG-02-0035");
+      const qtyPkts = calculateBroadway2KgPieces(relevantText, hasBroadwayLine);
+      if (!qtyPkts) return customer;
+      const sapLines = customer.sapLines.map(line => line.fgCode === "FG-02-0035" ? { ...line, qtyPkts } : line);
+      if (!hasBroadwayLine && /broadway|fg-02-0035/i.test(relevantText)) sapLines.push({ fgCode: "FG-02-0035", qtyPkts, warehouse: "HO-WH", productGroup: "CHEESE" });
+      return { ...customer, sapLines };
+    }),
+  };
+}
+
 export async function parseOrderWithAi(input: { sourceText: string; attachment?: ParserAttachment; masterUrl: string; learnedRules?: string[] }): Promise<ParsedOrderResult> {
   const recognizedLocal7030Ratio = recognizeLocal7030CartonPkts(input.sourceText);
   const calculatedLocal7030Pkts = calculateLocal7030PktQuantity(input.sourceText);
@@ -388,11 +427,11 @@ export async function parseOrderWithAi(input: { sourceText: string; attachment?:
 
   const primaryModel = input.attachment?.kind === "image" ? "gemini-3-flash-preview" : "gpt-5-mini";
   const primaryResult = await requestStructuredParse(primaryModel, false);
-  if (primaryResult && !needsFullMasterLookup(primaryResult)) return enforcePizzaCheddarBlockPhysicalQuantity(enforceAchhaMozBlockPhysicalQuantity(enforceLocal7030ShreddedQuantity(primaryResult, input.sourceText), input.sourceText), input.sourceText);
+  if (primaryResult && !needsFullMasterLookup(primaryResult)) return enforceBroadwayBranchQuantities(enforcePizzaCheddarBlockPhysicalQuantity(enforceAchhaMozBlockPhysicalQuantity(enforceLocal7030ShreddedQuantity(primaryResult, input.sourceText), input.sourceText), input.sourceText), input.sourceText);
 
   const fallbackModel = primaryModel === "gpt-5-mini" ? "gemini-3-flash-preview" : "gpt-5-mini";
   const retryResult = await requestStructuredParse(fallbackModel, true);
-  if (retryResult) return enforcePizzaCheddarBlockPhysicalQuantity(enforceAchhaMozBlockPhysicalQuantity(enforceLocal7030ShreddedQuantity(retryResult, input.sourceText), input.sourceText), input.sourceText);
+  if (retryResult) return enforceBroadwayBranchQuantities(enforcePizzaCheddarBlockPhysicalQuantity(enforceAchhaMozBlockPhysicalQuantity(enforceLocal7030ShreddedQuantity(retryResult, input.sourceText), input.sourceText), input.sourceText), input.sourceText);
 
   throw new Error("This order could not be safely read. Please resend a sharper screenshot or paste the text; no incomplete SAP order was created.");
 }
