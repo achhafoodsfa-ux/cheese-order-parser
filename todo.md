@@ -89,7 +89,7 @@
 - [x] Distinguish WhatsApp quoted/replied text from the actual order message during screenshot parsing.
 - [x] Associate nearby V1/V5 placement instructions with the intended customer order without duplicating the quoted order.
 - [x] Preserve the strict SAP line format while adding regression coverage for the supplied Local 70/30 WhatsApp example.
-- [ ] Save a checkpoint for the tested quote-aware parser improvement.
+- [x] Save a checkpoint for the tested quote-aware parser improvement.
 - [x] Add a mocked end-to-end screenshot parse proving quoted previews do not create a duplicate customer order.
 - [x] Deduplicate identical quoted customer SAP results even when no placement route is returned.
 - [x] Add an end-to-end V1/V5 regression proving the correct customer receives placement metadata while SAP rows remain unchanged.
