@@ -48,3 +48,8 @@
 - [x] Test Pizza Cheddar product recognition and save a checkpoint.
 - [x] Deterministically map raw Pizza Chadder/Cheddar blk/block wording to Pizza Cheddar Block 2KG FG-02-0006, except explicit 1KG.
 - [x] Add raw-input regression coverage proving Pizza Chadder blk 5 pcs produces FG-02-0006 with quantity 5.
+- [x] Inspect the supplied StockSheetFinalFormate.xlsx structure and map its branch, product, and quantity fields.
+- [x] Add a three-branch stock-order data model and branch-wise parsed quantity aggregation.
+- [x] Generate a completed stock sheet in the user's supplied Excel format.
+- [x] Build an integrated Stock Sheet dashboard with branch order input and downloadable output.
+- [x] Test the stock-sheet workflow with the sample format and save a checkpoint.

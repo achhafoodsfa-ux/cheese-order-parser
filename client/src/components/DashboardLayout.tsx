@@ -5,13 +5,14 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { ClipboardPenLine, History, LogOut, PanelLeft, Sparkles } from "lucide-react";
+import { ClipboardPenLine, FileSpreadsheet, History, LogOut, PanelLeft, Sparkles } from "lucide-react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 
 const menuItems = [
   { icon: ClipboardPenLine, label: "New parse", path: "/" },
+  { icon: FileSpreadsheet, label: "Stock sheet", path: "/stock-sheet" },
   { icon: History, label: "Order history", path: "/history" },
 ];
 

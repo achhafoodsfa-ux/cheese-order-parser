@@ -10,12 +10,21 @@ import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { createOrderSession, createParserMemory, deleteParserMemory, getOrderSessionById, listOrderSessions, listParserMemories } from "./db";
 import { parseOrderWithAi, type ParserAttachment } from "./orderParser";
 import { storagePut } from "./storage";
+import { populateStockSheet } from "./stockSheet";
+
+const STOCK_TEMPLATE_PATH = "/manus-storage/StockSheetFinalFormate_638d5c0a.xlsx";
 
 const attachmentInput = z.object({
   filename: z.string().min(1).max(140),
   mimeType: z.enum(["image/jpeg", "image/png", "image/webp", "application/pdf", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel"]),
   dataUrl: z.string().regex(/^data:(image\/(jpeg|png|webp)|application\/pdf|application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|application\/vnd\.ms-excel);base64,/).max(13_000_000),
 });
+
+const branchOrderInput = z.object({
+  branchName: z.string().trim().min(2).max(80),
+  sourceText: z.string().max(30_000).default(""),
+  attachment: attachmentInput.optional(),
+}).refine(input => input.sourceText.trim().length > 0 || input.attachment, { message: "Paste a branch order or attach an image, PDF, XLSX, or XLS file." });
 
 function attachmentBuffer(dataUrl: string): Buffer {
   return Buffer.from(dataUrl.slice(dataUrl.indexOf(",") + 1), "base64");
@@ -97,6 +106,29 @@ export const appRouter = router({
         if (!removed) throw new Error("Saved rule not found.");
         return { success: true } as const;
       }),
+    }),
+  }),
+  stock: router({
+    generate: protectedProcedure.input(z.object({ branches: z.array(branchOrderInput).length(3) })).mutation(async ({ ctx, input }) => {
+      const forwardedProtocol = ctx.req.headers["x-forwarded-proto"]?.toString().split(",")[0];
+      const protocol = forwardedProtocol || ctx.req.protocol || "https";
+      const host = ctx.req.get("host");
+      if (!host) throw new Error("Unable to resolve project storage routes.");
+      const masterUrl = `${protocol}://${host}/manus-storage/Cheese_SAP_Master_Training_Prompt_V4_SAP_ACTUAL_FORMAT_ca7294e2.txt`;
+      const learnedRules = (await listParserMemories(ctx.user.id)).map(memory => memory.instruction);
+      const parsedBranches = await Promise.all(input.branches.map(async (branch) => {
+        const kind = branch.attachment ? attachmentKind(branch.attachment.mimeType) : undefined;
+        const extractedFileText = kind === "xlsx" && branch.attachment ? spreadsheetToOrderText(branch.attachment.dataUrl, branch.attachment.filename) : kind === "pdf" && branch.attachment ? await pdfToOrderText(branch.attachment.dataUrl, branch.attachment.filename) : "";
+        const sourceText = [branch.sourceText.trim(), extractedFileText].filter(Boolean).join("\n\n");
+        const parserAttachment: ParserAttachment | undefined = branch.attachment && kind === "image" ? { kind, filename: branch.attachment.filename, mimeType: branch.attachment.mimeType, dataUrl: branch.attachment.dataUrl } : undefined;
+        const parsed = await parseOrderWithAi({ sourceText, attachment: parserAttachment, masterUrl, learnedRules });
+        return { branchName: branch.branchName, parsed };
+      }));
+      const templateResponse = await fetch(`${protocol}://${host}${STOCK_TEMPLATE_PATH}`);
+      if (!templateResponse.ok) throw new Error("The configured stock-sheet template could not be loaded.");
+      const generated = populateStockSheet(Buffer.from(await templateResponse.arrayBuffer()), parsedBranches);
+      const stored = await storagePut(`stock-sheets/${ctx.user.id}/cheese-stock-sheet-${Date.now()}.xlsx`, generated.data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      return { downloadUrl: stored.url, summaries: generated.summaries };
     }),
   }),
 });
