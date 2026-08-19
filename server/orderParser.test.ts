@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateLocal7030PktQuantity, enforceAchhaMozBlockPhysicalQuantity, enforceLocal7030ShreddedQuantity, extractLocal7030ShreddedTargets, formatCustomerSapBlock, formatSapLine, needsFullMasterLookup, normalizeParsedOrder, parseValidatedModelResult, recognizeAchhaMozBlockPhysicalQty, recognizeLocal7030CartonPkts } from "./orderParser";
+import { calculateLocal7030PktQuantity, enforceAchhaMozBlockPhysicalQuantity, enforceLocal7030ShreddedQuantity, enforcePizzaCheddarBlockPhysicalQuantity, extractLocal7030ShreddedTargets, formatCustomerSapBlock, formatSapLine, identifyPizzaCheddarBlock, needsFullMasterLookup, normalizeParsedOrder, parseValidatedModelResult, recognizeAchhaMozBlockPhysicalQty, recognizeLocal7030CartonPkts, recognizePizzaCheddarBlockPhysicalQty } from "./orderParser";
 
 describe("SAP order formatting", () => {
   it("renders the exact SAP row with two, five, then two tabs", () => {
@@ -88,5 +88,15 @@ describe("Achha Mozz block physical quantities", () => {
     expect(recognizeAchhaMozBlockPhysicalQty("Achha Moz block 2 ctn")).toBeUndefined();
     const corrected = enforceAchhaMozBlockPhysicalQuantity({ customers: [{ customerName: "Trade hub Pia Road", sapLines: [{ fgCode: "FG-01-0006", qtyPkts: 10, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] }], generalWarnings: [], detectedBubbles: [{ customerName: "Trade hub Pia Road", rawOrderText: "Acha Moz blk 5 blk" }] }, "");
     expect(corrected.customers[0]?.sapLines[0]?.qtyPkts).toBe(5);
+  });
+});
+
+describe("Pizza Cheddar Block recognition", () => {
+  it("normalizes Pizza Chadder wording and preserves the stated physical block quantity", () => {
+    expect(recognizePizzaCheddarBlockPhysicalQty("Pizza Chadder blk 5 pcs")).toBe(5);
+    expect(recognizePizzaCheddarBlockPhysicalQty("Pizza Cheddar block 2 ctn")).toBeUndefined();
+    expect(identifyPizzaCheddarBlock("Pizza Chadder blk 5 pcs")).toEqual({ fgCode: "FG-02-0006", qtyPkts: 5 });
+    const corrected = enforcePizzaCheddarBlockPhysicalQuantity({ customers: [{ customerName: "Baba Latif Johar town", sapLines: [{ fgCode: "FG-01-0042", qtyPkts: 20, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] }], generalWarnings: [], detectedBubbles: [{ customerName: "Baba Latif Johar town", rawOrderText: "Pizza Chadder blk 5 pcs" }] }, "");
+    expect(corrected.customers[0]?.sapLines).toContainEqual({ fgCode: "FG-02-0006", qtyPkts: 5, warehouse: "HO-WH", productGroup: "CHEESE" });
   });
 });

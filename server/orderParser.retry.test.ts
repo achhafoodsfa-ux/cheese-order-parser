@@ -63,7 +63,7 @@ describe("AI structured-output retry", () => {
       customers: [
         { customerName: "Food trader township", sapLines: [{ fgCode: "FG-01-0042", qtyPkts: 40, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] },
         { customerName: "Trade hub Pia Road", sapLines: [{ fgCode: "FG-01-0006", qtyPkts: 10, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] },
-        { customerName: "Baba Latif Johar town", sapLines: [{ fgCode: "FG-01-0042", qtyPkts: 20, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] },
+        { customerName: "Baba Latif Johar town", sapLines: [{ fgCode: "FG-01-0042", qtyPkts: 20, warehouse: "HO-WH", productGroup: "CHEESE" }, { fgCode: "FG-02-0006", qtyPkts: 10, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] },
       ],
       generalWarnings: [],
       detectedBubbles: [
@@ -79,6 +79,7 @@ describe("AI structured-output retry", () => {
 
     expect(result.customers.map(customer => customer.customerName)).toEqual(["Food trader township", "Trade hub Pia Road", "Baba Latif Johar town", "Nadeem Sb"]);
     expect(result.customers[1]?.sapLines[0]?.qtyPkts).toBe(5);
+    expect(result.customers[2]?.sapLines[1]?.qtyPkts).toBe(5);
     expect(result.customers[3]?.warnings[0]).toContain("Order captured from the screenshot");
     expect(invokeLLM.mock.calls[0]?.[0]?.messages[0]?.content).toContain("including the final bubble at the bottom");
     expect(invokeLLM.mock.calls[0]?.[0]?.messages[1]?.content[1]?.image_url.detail).toBe("high");

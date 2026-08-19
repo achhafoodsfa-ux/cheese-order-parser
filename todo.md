@@ -43,3 +43,8 @@
 - [x] Preserve every screenshot-detected WhatsApp bubble as a customer block or a visible warning instead of silently losing a final order.
 - [x] Enforce Achha Mozz physical block quantities in final SAP output for text and screenshot-driven parsing.
 - [x] Add regression coverage for the four-bubble WhatsApp order and final screenshot customer, then save a checkpoint.
+- [x] Recognize Pizza Chadder/Cheddar wording with blk/block as Pizza Cheddar Block 2KG.
+- [x] Preserve Pizza Cheddar block PCS/BLK/PKT quantities as physical pieces in final SAP output.
+- [x] Test Pizza Cheddar product recognition and save a checkpoint.
+- [x] Deterministically map raw Pizza Chadder/Cheddar blk/block wording to Pizza Cheddar Block 2KG FG-02-0006, except explicit 1KG.
+- [x] Add raw-input regression coverage proving Pizza Chadder blk 5 pcs produces FG-02-0006 with quantity 5.

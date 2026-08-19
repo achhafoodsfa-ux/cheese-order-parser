@@ -67,11 +67,17 @@ OFFICIAL HIGH-FREQUENCY MASTER MAPPINGS (check exact weight, style, colour and p
 - Allana Mozzarella Shredded White 2KG standard: FG-02-0097; Allana Mozzarella Shredded White 2KG W.Poly: FG-02-0164.
 - Allana Gold Mozzarella Shredded White 2KG standard: FG-02-0139; Allana Gold Mozzarella Shredded White 2KG W.Poly: FG-02-0163.
 - Allana Pizza 70/30 White Shredded standard: FG-02-0148; Allana Pizza 70/30 White Shredded W.Poly: FG-02-0173.
+- Pizza Cheddar Block 2KG (including Pizza Chadder/Pizza Chader): FG-02-0006. Pizza Cheddar Block 1KG: FG-02-0005.
 
 ACHHA MOZZ BLOCK QUANTITY RULE:
 - In WhatsApp orders, Achha Moz blk 5 blk, Achha Moz block 5, Achha Moz 5 pcs, or Achha Moz 5 pkt means Achha Mozzarella Block with exactly 5 physical PKT/PCS ordered. BLK/Block identifies the product style; the adjacent number is already a physical quantity, not a carton quantity.
 - Do not multiply a quantity written with BLK, Block, PCS, or PKT by the block carton ratio unless the same product row explicitly says CTN/carton/box.
 - For plain 2KG Achha Mozzarella Block, use the exact matching official row; FG-01-0006 is the standard 2KG block if no more specific qualifier is present.
+
+PIZZA CHEDDAR BLOCK RECOGNITION:
+- Pizza Chadder, Pizza Chader, Pizza Cheder, and Pizza Cheddar all normalize to Pizza Cheddar.
+- If Pizza Cheddar/Chadder appears with BLK/Block and no explicit 1KG wording, identify it as Pizza Cheddar Block 2KG, FG-02-0006.
+- A quantity written as Pizza Chadder blk 5 pcs, Pizza Cheddar 5 blk, or Pizza Chadder block 5 is exactly 5 physical PKT/PCS. Do not multiply it by the 10 PCS/CTN block ratio unless CTN/carton/box is explicitly written on that product row.
 
 LOCAL 70/30 PRODUCT-FIRST RECOGNITION — apply before CTN conversion:
 - Identify the product style first. For Local 70/30, Shredded/Shred/Shreded (or no style word) means Shredded; Block means Block; Slice/Slices means Slices.
@@ -228,6 +234,37 @@ export function enforceAchhaMozBlockPhysicalQuantity(result: ParsedOrderResult, 
   };
 }
 
+export function recognizePizzaCheddarBlockPhysicalQty(sourceText: string): number | undefined {
+  const line = sourceText.toLowerCase();
+  if (!/pizza\s+ch(?:e|a)d+(?:a|e)?r?/.test(line) || !/\b(?:blk|block)\b/.test(line) || /\b(?:ctn|carton|box)\b/.test(line)) return undefined;
+  const match = line.match(/(?:\b(\d+)\s*(?:blk|block|pcs?|pkt)\b|\b(?:blk|block)\s*(\d+)\b)/i);
+  const quantity = Number(match?.[1] || match?.[2]);
+  return Number.isInteger(quantity) && quantity > 0 ? quantity : undefined;
+}
+
+export function identifyPizzaCheddarBlock(sourceText: string): { fgCode: "FG-02-0005" | "FG-02-0006"; qtyPkts: number } | undefined {
+  const qtyPkts = recognizePizzaCheddarBlockPhysicalQty(sourceText);
+  if (!qtyPkts) return undefined;
+  return { fgCode: /\b1\s*kg\b/i.test(sourceText) ? "FG-02-0005" : "FG-02-0006", qtyPkts };
+}
+
+export function enforcePizzaCheddarBlockPhysicalQuantity(result: ParsedOrderResult, sourceText: string): ParsedOrderResult {
+  const bubbleTextByCustomer = new Map(result.detectedBubbles.map(bubble => [normalizeCustomerKey(bubble.customerName), bubble.rawOrderText]));
+  return {
+    ...result,
+    customers: result.customers.map(customer => {
+      const relevantText = bubbleTextByCustomer.get(normalizeCustomerKey(customer.customerName)) || sourceText;
+      const pizzaBlock = identifyPizzaCheddarBlock(relevantText);
+      if (!pizzaBlock) return customer;
+      const pizzaCodes = ["FG-02-0005", "FG-02-0006"];
+      const hasPizzaLine = customer.sapLines.some(line => pizzaCodes.includes(line.fgCode));
+      const sapLines = customer.sapLines.map(line => pizzaCodes.includes(line.fgCode) ? { ...line, fgCode: pizzaBlock.fgCode, qtyPkts: pizzaBlock.qtyPkts } : line);
+      if (!hasPizzaLine) sapLines.push({ fgCode: pizzaBlock.fgCode, qtyPkts: pizzaBlock.qtyPkts, warehouse: "HO-WH", productGroup: "CHEESE" });
+      return { ...customer, sapLines };
+    }),
+  };
+}
+
 export function enforceLocal7030ShreddedQuantity(result: ParsedOrderResult, sourceText: string): ParsedOrderResult {
   const targets = extractLocal7030ShreddedTargets(sourceText);
   if (!targets.length) return result;
@@ -321,11 +358,11 @@ export async function parseOrderWithAi(input: { sourceText: string; attachment?:
 
   const primaryModel = input.attachment?.kind === "image" ? "gemini-3-flash-preview" : "gpt-5-mini";
   const primaryResult = await requestStructuredParse(primaryModel, false);
-  if (primaryResult && !needsFullMasterLookup(primaryResult)) return enforceAchhaMozBlockPhysicalQuantity(enforceLocal7030ShreddedQuantity(primaryResult, input.sourceText), input.sourceText);
+  if (primaryResult && !needsFullMasterLookup(primaryResult)) return enforcePizzaCheddarBlockPhysicalQuantity(enforceAchhaMozBlockPhysicalQuantity(enforceLocal7030ShreddedQuantity(primaryResult, input.sourceText), input.sourceText), input.sourceText);
 
   const fallbackModel = primaryModel === "gpt-5-mini" ? "gemini-3-flash-preview" : "gpt-5-mini";
   const retryResult = await requestStructuredParse(fallbackModel, true);
-  if (retryResult) return enforceAchhaMozBlockPhysicalQuantity(enforceLocal7030ShreddedQuantity(retryResult, input.sourceText), input.sourceText);
+  if (retryResult) return enforcePizzaCheddarBlockPhysicalQuantity(enforceAchhaMozBlockPhysicalQuantity(enforceLocal7030ShreddedQuantity(retryResult, input.sourceText), input.sourceText), input.sourceText);
 
   throw new Error("This order could not be safely read. Please resend a sharper screenshot or paste the text; no incomplete SAP order was created.");
 }
