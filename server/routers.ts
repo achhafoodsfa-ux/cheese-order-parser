@@ -7,9 +7,8 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
-import { createOrderSession, createParserMemory, deleteParserMemory, getOrderSessionById, listOrderSessions, listParserMemories } from "./db";
+import { createParserMemory, deleteParserMemory, listParserMemories } from "./db";
 import { parseOrderWithAi, type ParserAttachment } from "./orderParser";
-import { storagePut } from "./storage";
 import { populateStockSheet } from "./stockSheet";
 
 const STOCK_TEMPLATE_PATH = "/manus-storage/StockSheetFinalFormate_638d5c0a.xlsx";
@@ -54,6 +53,10 @@ export function attachmentKind(mimeType: string): "image" | "pdf" | "xlsx" {
   return "xlsx";
 }
 
+function worksheetDataUrl(data: Buffer): string {
+  return `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${data.toString("base64")}`;
+}
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -65,16 +68,7 @@ export const appRouter = router({
   }),
   orders: router({
     parse: protectedProcedure.input(z.object({ sourceText: z.string().max(30_000).default(""), attachment: attachmentInput.optional() }).refine(input => input.sourceText.trim().length > 0 || input.attachment, { message: "Paste an order or add an image, PDF, or XLSX file." })).mutation(async ({ ctx, input }) => {
-      let sourceImageKey: string | undefined;
-      let sourceImageUrl: string | undefined;
       const kind = input.attachment ? attachmentKind(input.attachment.mimeType) : undefined;
-      if (input.attachment) {
-        const extension = input.attachment.filename.split(".").pop() || input.attachment.mimeType.split("/")[1];
-        const safeName = input.attachment.filename.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 90);
-        const stored = await storagePut(`orders/${ctx.user.id}/${Date.now()}-${safeName || `order-file.${extension}`}`, attachmentBuffer(input.attachment.dataUrl), input.attachment.mimeType);
-        sourceImageKey = stored.key;
-        sourceImageUrl = stored.url;
-      }
       const forwardedProtocol = ctx.req.headers["x-forwarded-proto"]?.toString().split(",")[0];
       const protocol = forwardedProtocol || ctx.req.protocol || "https";
       const host = ctx.req.get("host");
@@ -85,14 +79,7 @@ export const appRouter = router({
       const parserAttachment: ParserAttachment | undefined = input.attachment && kind === "image" ? { kind, filename: input.attachment.filename, mimeType: input.attachment.mimeType, dataUrl: input.attachment.dataUrl } : undefined;
       const learnedRules = (await listParserMemories(ctx.user.id)).map(memory => memory.instruction);
       const parsed = await parseOrderWithAi({ sourceText, attachment: parserAttachment, masterUrl, learnedRules });
-      const session = await createOrderSession({ userId: ctx.user.id, sourceText: input.sourceText.trim() || (input.attachment ? `Attached file: ${input.attachment.filename}` : null), sourceImageKey: sourceImageKey ?? null, sourceImageUrl: sourceImageUrl ?? null, customers: parsed.customers, generalWarnings: parsed.generalWarnings });
-      return { ...parsed, sessionId: session?.id ?? null, createdAt: session?.createdAt ?? new Date() };
-    }),
-    history: protectedProcedure.query(({ ctx }) => listOrderSessions(ctx.user.id)),
-    get: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(async ({ ctx, input }) => {
-      const session = await getOrderSessionById(ctx.user.id, input.id);
-      if (!session) throw new Error("Saved order not found.");
-      return session;
+      return { ...parsed, sessionId: null, createdAt: new Date() };
     }),
     memory: router({
       list: protectedProcedure.query(({ ctx }) => listParserMemories(ctx.user.id)),
@@ -127,8 +114,34 @@ export const appRouter = router({
       const templateResponse = await fetch(`${protocol}://${host}${STOCK_TEMPLATE_PATH}`);
       if (!templateResponse.ok) throw new Error("The configured stock-sheet template could not be loaded.");
       const generated = populateStockSheet(Buffer.from(await templateResponse.arrayBuffer()), parsedBranches);
-      const stored = await storagePut(`stock-sheets/${ctx.user.id}/cheese-stock-sheet-${Date.now()}.xlsx`, generated.data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      return { downloadUrl: stored.url, summaries: generated.summaries };
+      return { downloadDataUrl: worksheetDataUrl(generated.data), summaries: generated.summaries };
+    }),
+    generateUnified: protectedProcedure.input(z.object({ sourceText: z.string().max(30_000).default(""), attachment: attachmentInput.optional() }).refine(input => input.sourceText.trim().length > 0 || input.attachment, { message: "Paste the three-branch order or attach an image, PDF, XLSX, or XLS file." })).mutation(async ({ ctx, input }) => {
+      const forwardedProtocol = ctx.req.headers["x-forwarded-proto"]?.toString().split(",")[0];
+      const protocol = forwardedProtocol || ctx.req.protocol || "https";
+      const host = ctx.req.get("host");
+      if (!host) throw new Error("Unable to resolve project storage routes.");
+      const masterUrl = `${protocol}://${host}/manus-storage/Cheese_SAP_Master_Training_Prompt_V4_SAP_ACTUAL_FORMAT_ca7294e2.txt`;
+      const kind = input.attachment ? attachmentKind(input.attachment.mimeType) : undefined;
+      const extractedFileText = kind === "xlsx" && input.attachment ? spreadsheetToOrderText(input.attachment.dataUrl, input.attachment.filename) : kind === "pdf" && input.attachment ? await pdfToOrderText(input.attachment.dataUrl, input.attachment.filename) : "";
+      const sourceText = [input.sourceText.trim(), extractedFileText].filter(Boolean).join("\n\n");
+      const parserAttachment: ParserAttachment | undefined = input.attachment && kind === "image" ? { kind, filename: input.attachment.filename, mimeType: input.attachment.mimeType, dataUrl: input.attachment.dataUrl } : undefined;
+      const learnedRules = (await listParserMemories(ctx.user.id)).map(memory => memory.instruction);
+      const parsed = await parseOrderWithAi({ sourceText, attachment: parserAttachment, masterUrl, learnedRules });
+      const grouped = new Map<string, { branchName: string; customers: typeof parsed.customers }>();
+      parsed.customers.forEach(customer => {
+        const key = customer.customerName.trim().toLowerCase();
+        const existing = grouped.get(key);
+        if (existing) existing.customers.push(customer);
+        else grouped.set(key, { branchName: customer.customerName, customers: [customer] });
+      });
+      const branches = Array.from(grouped.values());
+      if (branches.length !== 3) throw new Error(`This stock sheet needs exactly 3 branch orders. I found ${branches.length}. Please ensure all three branch names and orders are visible in the smart input.`);
+      const parsedBranches = branches.map(branch => ({ branchName: branch.branchName, parsed: { customers: branch.customers, generalWarnings: parsed.generalWarnings, detectedBubbles: parsed.detectedBubbles.filter(bubble => bubble.customerName.trim().toLowerCase() === branch.branchName.trim().toLowerCase()) } }));
+      const templateResponse = await fetch(`${protocol}://${host}${STOCK_TEMPLATE_PATH}`);
+      if (!templateResponse.ok) throw new Error("The configured stock-sheet template could not be loaded.");
+      const generated = populateStockSheet(Buffer.from(await templateResponse.arrayBuffer()), parsedBranches);
+      return { downloadDataUrl: worksheetDataUrl(generated.data), summaries: generated.summaries };
     }),
   }),
 });

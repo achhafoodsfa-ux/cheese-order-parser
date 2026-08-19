@@ -53,3 +53,13 @@
 - [x] Generate a completed stock sheet in the user's supplied Excel format.
 - [x] Build an integrated Stock Sheet dashboard with branch order input and downloadable output.
 - [x] Test the stock-sheet workflow with the sample format and save a checkpoint.
+- [x] Verify that the latest Stock Sheet navigation and route are visible on the live published domain.
+- [x] Resolve any stale version or live deployment visibility issue and confirm access to the Stock Sheet module.
+- [x] Replace the three separate Stock Sheet branch inputs with one smart box for text, screenshots, PDFs, XLSX, and XLS files.
+- [x] Detect branch/customer orders automatically from the single input and aggregate them into the stock-sheet template.
+- [x] Preserve final workbook download and branch-level unmatched-product warnings in the unified workflow.
+- [ ] Save a checkpoint for the verified unified Stock Sheet intake and download workflow.
+- [x] Stop automatically saving parsed order sessions and uploaded order files.
+- [x] Preserve only explicit Teach parser permanently rules as durable knowledge.
+- [x] Remove or hide order-history navigation and verify normal parses remain non-persistent.
+- [ ] Save a checkpoint for the verified privacy-focused parser behavior.

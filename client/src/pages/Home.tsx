@@ -25,7 +25,7 @@ export default function Home() {
   const dragDepth = useRef(0);
   const utils = trpc.useUtils();
   const parse = trpc.orders.parse.useMutation({
-    onSuccess: async (parsed) => { setProgress(100); setResult(parsed); setSourceText(""); setAttachment(null); await utils.orders.history.invalidate(); toast.success(`${parsed.customers.length} customer ${parsed.customers.length === 1 ? "order is" : "orders are"} ready.`); window.setTimeout(() => setProgress(0), 700); },
+    onSuccess: (parsed) => { setProgress(100); setResult(parsed); setSourceText(""); setAttachment(null); toast.success(`${parsed.customers.length} customer ${parsed.customers.length === 1 ? "order is" : "orders are"} ready.`); window.setTimeout(() => setProgress(0), 700); },
     onError: error => toast.error(error.message || "The order could not be parsed. Please try again."),
   });
   const memories = trpc.orders.memory.list.useQuery();
