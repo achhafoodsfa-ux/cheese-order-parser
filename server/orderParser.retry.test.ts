@@ -25,8 +25,8 @@ describe("AI structured-output retry", () => {
 
     expect(result.customers[0]?.customerName).toBe("Furqan AFPL");
     expect(invokeLLM).toHaveBeenCalledTimes(2);
-    expect(invokeLLM.mock.calls[0]?.[0]).toMatchObject({ model: "gemini-3-flash-preview" });
-    expect(invokeLLM.mock.calls[1]?.[0]).toMatchObject({ model: "gpt-5-mini" });
+    expect(invokeLLM.mock.calls[0]?.[0]).toMatchObject({ model: "gpt-5-mini" });
+    expect(invokeLLM.mock.calls[1]?.[0]).toMatchObject({ model: "gemini-3-flash-preview" });
   });
 
   it("returns a safe operational error after both structured responses are invalid", async () => {

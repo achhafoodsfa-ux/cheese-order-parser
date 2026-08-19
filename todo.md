@@ -26,3 +26,6 @@
 - [x] Add a visible multi-step parsing progress animation to the smart input.
 - [x] Package and validate the Cheese SAP order parsing workflow as a reusable skill.
 - [x] Test the retained-knowledge and loading-state behavior, then save a checkpoint.
+- [x] Clear pasted text and the selected file after a successful parse while keeping the parsed SAP output visible.
+- [x] Further reduce common-order AI parsing latency without weakening validation or customer separation.
+- [x] Test the input-reset behavior and optimized parser workflow, then save a checkpoint.

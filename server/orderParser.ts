@@ -142,11 +142,11 @@ export function needsFullMasterLookup(result: ParsedOrderResult | null): boolean
 export async function parseOrderWithAi(input: { sourceText: string; attachment?: ParserAttachment; masterUrl: string; learnedRules?: string[] }): Promise<ParsedOrderResult> {
   const userContent: Array<
     { type: "text"; text: string }
-    | { type: "image_url"; image_url: { url: string; detail: "high" } }
+    | { type: "image_url"; image_url: { url: string; detail: "auto" | "high" } }
   > = [
     { type: "text", text: `ORDER SOURCE TEXT:\n${input.sourceText || "No typed text supplied. Read the attached order file."}` },
   ];
-  if (input.attachment?.kind === "image") userContent.push({ type: "image_url", image_url: { url: input.attachment.dataUrl, detail: "high" } });
+  if (input.attachment?.kind === "image") userContent.push({ type: "image_url", image_url: { url: input.attachment.dataUrl, detail: "auto" } });
 
   const responseFormat = {
       type: "json_schema",
@@ -194,14 +194,16 @@ export async function parseOrderWithAi(input: { sourceText: string; attachment?:
       { role: "system" as const, content: `${CHEESE_MASTER_PROMPT}\n\n${promptMode}${durableMemory}` },
       { role: "user" as const, content: userContent },
     ];
-    const response = await invokeLLM({ model, messages, response_format: responseFormat, maxTokens: useFullMaster ? 6_000 : 4_000 });
+    const response = await invokeLLM({ model, messages, response_format: responseFormat, maxTokens: useFullMaster ? 4_000 : 2_200 });
     return parseValidatedModelResult(response.choices[0]?.message?.content);
   };
 
-  const primaryResult = await requestStructuredParse("gemini-3-flash-preview", false);
+  const primaryModel = input.attachment?.kind === "image" ? "gemini-3-flash-preview" : "gpt-5-mini";
+  const primaryResult = await requestStructuredParse(primaryModel, false);
   if (primaryResult && !needsFullMasterLookup(primaryResult)) return primaryResult;
 
-  const retryResult = await requestStructuredParse("gpt-5-mini", true);
+  const fallbackModel = primaryModel === "gpt-5-mini" ? "gemini-3-flash-preview" : "gpt-5-mini";
+  const retryResult = await requestStructuredParse(fallbackModel, true);
   if (retryResult) return retryResult;
 
   throw new Error("This order could not be safely read. Please resend a sharper screenshot or paste the text; no incomplete SAP order was created.");
