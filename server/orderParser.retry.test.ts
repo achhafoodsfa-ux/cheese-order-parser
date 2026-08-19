@@ -43,4 +43,18 @@ describe("AI structured-output retry", () => {
 
     expect(invokeLLM.mock.calls[0]?.[0]?.messages[0]?.content).toContain("Furqan AFPL uses approved imported 70/30 wording.");
   });
+
+  it("handles the reported Local 70/30 carton order without an unknown-ratio warning", async () => {
+    const localOrder = JSON.stringify({
+      customers: [{ customerName: "Local Customer", sapLines: [{ fgCode: "FG-03-0018", qtyPkts: 5, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] }],
+      generalWarnings: [],
+    });
+    invokeLLM.mockResolvedValueOnce({ choices: [{ message: { content: localOrder } }] });
+
+    const result = await parseOrderWithAi({ sourceText: "01 ctn Local 70/30 2KG", masterUrl: "https://example.test/master" });
+
+    expect(result.customers[0]?.sapLines[0]?.qtyPkts).toBe(5);
+    expect(result.generalWarnings.join(" ")).not.toContain("carton-to-PKT conversion unknown");
+    expect(invokeLLM.mock.calls[0]?.[0]?.messages[1]?.content[0]?.text).toContain("converts to 5 PKTS");
+  });
 });

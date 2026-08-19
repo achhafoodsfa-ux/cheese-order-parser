@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCustomerSapBlock, formatSapLine, needsFullMasterLookup, normalizeParsedOrder, parseValidatedModelResult } from "./orderParser";
+import { calculateLocal7030PktQuantity, formatCustomerSapBlock, formatSapLine, needsFullMasterLookup, normalizeParsedOrder, parseValidatedModelResult, recognizeLocal7030CartonPkts } from "./orderParser";
 
 describe("SAP order formatting", () => {
   it("renders the exact SAP row with two, five, then two tabs", () => {
@@ -43,5 +43,17 @@ describe("structured model-response recovery", () => {
   it("requests the full product master only when the compact mapping flags a missing item", () => {
     expect(needsFullMasterLookup({ customers: [], generalWarnings: ["MASTER_LOOKUP_REQUIRED"] })).toBe(true);
     expect(needsFullMasterLookup({ customers: [], generalWarnings: ["No ambiguity"] })).toBe(false);
+  });
+});
+
+describe("Local 70/30 product-first carton recognition", () => {
+  it("identifies style before selecting the Local 70/30 carton conversion", () => {
+    expect(recognizeLocal7030CartonPkts("01 ctn Local 70/30 2KG shredded")).toBe(5);
+    expect(recognizeLocal7030CartonPkts("01 ctn Local 70/30 block")).toBe(10);
+    expect(recognizeLocal7030CartonPkts("01 ctn Local 70/30 slices")).toBe(18);
+    expect(recognizeLocal7030CartonPkts("01 ctn imported 70/30")).toBeUndefined();
+    expect(calculateLocal7030PktQuantity("01 ctn Local 70/30 2KG")).toBe(5);
+    expect(calculateLocal7030PktQuantity("02 ctn Local 70/30 block")).toBe(20);
+    expect(calculateLocal7030PktQuantity("03 ctn Local 70/30 slices")).toBe(54);
   });
 });

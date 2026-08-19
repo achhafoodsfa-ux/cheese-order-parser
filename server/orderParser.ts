@@ -61,6 +61,12 @@ OFFICIAL HIGH-FREQUENCY MASTER MAPPINGS (check exact weight, style, colour and p
 - Allana Gold Mozzarella Shredded White 2KG standard: FG-02-0139; Allana Gold Mozzarella Shredded White 2KG W.Poly: FG-02-0163.
 - Allana Pizza 70/30 White Shredded standard: FG-02-0148; Allana Pizza 70/30 White Shredded W.Poly: FG-02-0173.
 
+LOCAL 70/30 PRODUCT-FIRST RECOGNITION — apply before CTN conversion:
+- Identify the product style first. For Local 70/30, Shredded/Shred/Shreded (or no style word) means Shredded; Block means Block; Slice/Slices means Slices.
+- For Local 70/30 Shredded, use 5 PKTS per CTN/box for the standard 2KG item. The known 2KG shredded FG code is FG-03-0018; use the 1KG master row only when 1KG is explicit.
+- For Local 70/30 Block, use 10 PKTS per CTN/box. For Local 70/30 Slices, use 18 PKTS per CTN/box.
+- Never report an unknown carton ratio for a recognized Local 70/30 Shredded, Block, or Slice order. Recognize the style first, then apply its carton rule. Keep customer blocks separate.
+
 For a matching official master entry, do not invent, alter, or correct an FG code from memory. Preserve customer-level separation through final validation. Return all answer fields in English or Roman Urdu as appropriate, but maintain SAP values exactly.
 `;
 
@@ -139,12 +145,30 @@ export function needsFullMasterLookup(result: ParsedOrderResult | null): boolean
   return Boolean(result?.generalWarnings.some(warning => warning.includes("MASTER_LOOKUP_REQUIRED")));
 }
 
+export function recognizeLocal7030CartonPkts(sourceText: string): number | undefined {
+  const normalized = sourceText.toLowerCase().replace(/\s+/g, " ");
+  if (!/local\s*70\s*\/\s*30|local 7030/.test(normalized)) return undefined;
+  if (/\bslices?\b/.test(normalized)) return 18;
+  if (/\bblock\b/.test(normalized)) return 10;
+  return 5;
+}
+
+export function calculateLocal7030PktQuantity(sourceText: string): number | undefined {
+  const ratio = recognizeLocal7030CartonPkts(sourceText);
+  const cartonMatch = sourceText.match(/\b(\d+)\s*(?:ctn|carton|box)\b/i);
+  if (!ratio || !cartonMatch) return undefined;
+  return Number(cartonMatch[1]) * ratio;
+}
+
 export async function parseOrderWithAi(input: { sourceText: string; attachment?: ParserAttachment; masterUrl: string; learnedRules?: string[] }): Promise<ParsedOrderResult> {
+  const recognizedLocal7030Ratio = recognizeLocal7030CartonPkts(input.sourceText);
+  const calculatedLocal7030Pkts = calculateLocal7030PktQuantity(input.sourceText);
+  const local7030Hint = recognizedLocal7030Ratio ? `\n\nPRODUCT-FIRST LOCAL 70/30 HINT: This source contains Local 70/30. Use ${recognizedLocal7030Ratio} PKTS per CTN after identifying its style${calculatedLocal7030Pkts ? `; the stated carton quantity converts to ${calculatedLocal7030Pkts} PKTS` : ""}. Do not report an unknown carton ratio.` : "";
   const userContent: Array<
     { type: "text"; text: string }
     | { type: "image_url"; image_url: { url: string; detail: "auto" | "high" } }
   > = [
-    { type: "text", text: `ORDER SOURCE TEXT:\n${input.sourceText || "No typed text supplied. Read the attached order file."}` },
+    { type: "text", text: `ORDER SOURCE TEXT:\n${input.sourceText || "No typed text supplied. Read the attached order file."}${local7030Hint}` },
   ];
   if (input.attachment?.kind === "image") userContent.push({ type: "image_url", image_url: { url: input.attachment.dataUrl, detail: "auto" } });
 

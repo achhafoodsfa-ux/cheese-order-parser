@@ -29,3 +29,6 @@
 - [x] Clear pasted text and the selected file after a successful parse while keeping the parsed SAP output visible.
 - [x] Further reduce common-order AI parsing latency without weakening validation or customer separation.
 - [x] Test the input-reset behavior and optimized parser workflow, then save a checkpoint.
+- [x] Recognize Local 70/30 product style before calculating CTN-to-PKT quantities.
+- [x] Apply Local 70/30 carton rules: Shredded 5 PKT/CTN, Block 10 PKT/CTN, Slices 18 PKT/CTN.
+- [x] Test the Local 70/30 recognition and conversion correction, then save a checkpoint.
