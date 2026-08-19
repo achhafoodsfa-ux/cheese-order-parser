@@ -82,4 +82,4 @@
 - [x] Save a checkpoint for the tested image-share action.
 - [x] Replace Share as Image with a Copy as Image action for the current route matrix.
 - [x] Copy the generated PNG directly to the clipboard with a clear download fallback when clipboard images are unavailable.
-- [ ] Save a checkpoint for the tested clipboard-copy action.
+- [x] Save a checkpoint for the tested clipboard-copy action.
