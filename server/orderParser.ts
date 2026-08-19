@@ -50,7 +50,7 @@ OFFICIAL HIGH-FREQUENCY MASTER MAPPINGS (check exact weight, style, colour and p
 - Imported 70/30 2KG: FG-03-0006.
 - Verona Shredded 2KG: FG-01-0072; Verona Shredded 1KG: FG-01-0071; Verona Shredded 2KG WP: FG-01-0122.
 - Classic Shredded standard 2KG: FG-02-0036; Classic 70/30: FG-02-0072; Classic Cheddar Shredded: FG-02-0066.
-- Top Cow Cheddar Shredded: FG-02-0074; Top Cow White Dice 2KG: FG-02-0048; Top Cow Yellow Dice 2KG: FG-02-0049; Top Cow Mozzarella Block White 2KG: FG-02-0060.
+- Top Cow Cheddar Shredded: FG-02-0074. SPECIAL TOP COW RULE: for standard Top Cow mozzarella only, treat Shredded/Shred and Dice as equivalent wording. Top Cow White Shredded/Dice 2KG = FG-02-0048; Top Cow Yellow Shredded/Dice 2KG = FG-02-0049. Do not apply this rule when 70/30, Premium, W.Poly, or Block is explicitly stated; use the exact matching master row instead.
 - White Slice 1KG: FG-02-0023; White Slice 800GM: FG-02-0037; Yellow Slice 1KG: FG-02-0028; Yellow Slice 800GM: FG-02-0038; Jalapeno Slice: FG-02-0039.
 - MF White: 2KG FG-02-0093; 2.5KG FG-02-0102. MF Yellow: 2KG FG-02-0091; 2.5KG FG-02-0104.
 - Pro White: 2KG FG-02-0122; 2.5KG FG-02-0106. Pro Yellow: 2KG FG-02-0124; 2.5KG FG-02-0108.
@@ -70,7 +70,7 @@ async function getOfficialMasterPrompt(masterUrl: string): Promise<string> {
   if (!response.ok) throw new Error("The official SAP product master could not be loaded.");
   const content = await response.text();
   if (!content.includes("OFFICIAL 229-ROW ITEM MASTER")) throw new Error("The official SAP product master is incomplete.");
-  officialMasterCache = { content, expiresAt: Date.now() + 15 * 60 * 1000 };
+  officialMasterCache = { content, expiresAt: Date.now() + 6 * 60 * 60 * 1000 };
   return content;
 }
 
@@ -135,8 +135,11 @@ export function parseValidatedModelResult(content: unknown): ParsedOrderResult |
   }
 }
 
+export function needsFullMasterLookup(result: ParsedOrderResult | null): boolean {
+  return Boolean(result?.generalWarnings.some(warning => warning.includes("MASTER_LOOKUP_REQUIRED")));
+}
+
 export async function parseOrderWithAi(input: { sourceText: string; attachment?: ParserAttachment; masterUrl: string }): Promise<ParsedOrderResult> {
-  const officialMasterPrompt = await getOfficialMasterPrompt(input.masterUrl);
   const userContent: Array<
     { type: "text"; text: string }
     | { type: "image_url"; image_url: { url: string; detail: "high" } }
@@ -145,10 +148,6 @@ export async function parseOrderWithAi(input: { sourceText: string; attachment?:
   ];
   if (input.attachment?.kind === "image") userContent.push({ type: "image_url", image_url: { url: input.attachment.dataUrl, detail: "high" } });
 
-  const messages = [
-    { role: "system" as const, content: `${CHEESE_MASTER_PROMPT}\n\nCANONICAL OFFICIAL MASTER PROMPT — APPLY THIS IN FULL:\n${officialMasterPrompt}` },
-    { role: "user" as const, content: userContent },
-  ];
   const responseFormat = {
       type: "json_schema",
       json_schema: {
@@ -185,15 +184,23 @@ export async function parseOrderWithAi(input: { sourceText: string; attachment?:
       },
   } as const;
 
-  const requestStructuredParse = async (model: "gemini-3-flash-preview" | "gpt-5-mini") => {
-    const response = await invokeLLM({ model, messages, response_format: responseFormat, maxTokens: 8_000 });
+  const requestStructuredParse = async (model: "gemini-3-flash-preview" | "gpt-5-mini", useFullMaster: boolean) => {
+    const officialMasterPrompt = useFullMaster ? await getOfficialMasterPrompt(input.masterUrl) : "";
+    const promptMode = useFullMaster
+      ? `CANONICAL OFFICIAL MASTER PROMPT — APPLY THIS IN FULL:\n${officialMasterPrompt}`
+      : "FAST PATH: Use the compact mappings above for common items. If any product requires a mapping not covered above, do not guess; include the exact warning token MASTER_LOOKUP_REQUIRED in generalWarnings so the system performs a full-master lookup.";
+    const messages = [
+      { role: "system" as const, content: `${CHEESE_MASTER_PROMPT}\n\n${promptMode}` },
+      { role: "user" as const, content: userContent },
+    ];
+    const response = await invokeLLM({ model, messages, response_format: responseFormat, maxTokens: useFullMaster ? 6_000 : 4_000 });
     return parseValidatedModelResult(response.choices[0]?.message?.content);
   };
 
-  const primaryResult = await requestStructuredParse("gemini-3-flash-preview");
-  if (primaryResult) return primaryResult;
+  const primaryResult = await requestStructuredParse("gemini-3-flash-preview", false);
+  if (primaryResult && !needsFullMasterLookup(primaryResult)) return primaryResult;
 
-  const retryResult = await requestStructuredParse("gpt-5-mini");
+  const retryResult = await requestStructuredParse("gpt-5-mini", true);
   if (retryResult) return retryResult;
 
   throw new Error("This order could not be safely read. Please resend a sharper screenshot or paste the text; no incomplete SAP order was created.");

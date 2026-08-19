@@ -17,3 +17,7 @@
 - [x] Verify the revised single-input experience and save a new checkpoint.
 - [x] Prevent malformed AI structured responses from surfacing raw JSON parsing errors for complex WhatsApp screenshots.
 - [x] Add automatic response validation and retry coverage for failed structured parses.
+- [x] Treat Top Cow shredded and dice wording as equivalent for the specified Top Cow mappings.
+- [x] Reduce AI parsing latency without weakening SAP output validation.
+- [x] Add drag-and-drop file receiving for images, PDFs, XLSX, and XLS files in the smart input.
+- [x] Verify dropped files are accepted and the updated parser behavior is covered by tests.

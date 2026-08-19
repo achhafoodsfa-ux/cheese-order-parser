@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCustomerSapBlock, formatSapLine, normalizeParsedOrder, parseValidatedModelResult } from "./orderParser";
+import { formatCustomerSapBlock, formatSapLine, needsFullMasterLookup, normalizeParsedOrder, parseValidatedModelResult } from "./orderParser";
 
 describe("SAP order formatting", () => {
   it("renders the exact SAP row with two, five, then two tabs", () => {
@@ -38,5 +38,10 @@ describe("structured model-response recovery", () => {
   it("accepts JSON wrapped in a markdown fence after validation", () => {
     const content = '```json\n{"customers":[{"customerName":"Furqan AFPL","sapLines":[{"fgCode":"FG-03-0006","qtyPkts":15,"warehouse":"HO-WH","productGroup":"CHEESE"}],"warnings":[]}],"generalWarnings":[]}\n```';
     expect(parseValidatedModelResult(content)?.customers[0]?.customerName).toBe("Furqan AFPL");
+  });
+
+  it("requests the full product master only when the compact mapping flags a missing item", () => {
+    expect(needsFullMasterLookup({ customers: [], generalWarnings: ["MASTER_LOOKUP_REQUIRED"] })).toBe(true);
+    expect(needsFullMasterLookup({ customers: [], generalWarnings: ["No ambiguity"] })).toBe(false);
   });
 });

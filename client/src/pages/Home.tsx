@@ -6,7 +6,7 @@ import { customerSapRows, visibleSapLine } from "@/lib/sapFormat";
 import { trpc } from "@/lib/trpc";
 import type { ParsedCustomerOrder, ParsedOrderResult } from "@shared/orderTypes";
 import { Check, Clipboard, FileImage, FileSpreadsheet, FileText, Loader2, Paperclip, Send, Sparkles, X } from "lucide-react";
-import { useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { toast } from "sonner";
 
 type ParseScreenResult = ParsedOrderResult & { sessionId: number | null; createdAt: Date };
@@ -17,7 +17,9 @@ export default function Home() {
   const [sourceText, setSourceText] = useState("");
   const [attachment, setAttachment] = useState<PendingAttachment | null>(null);
   const [result, setResult] = useState<ParseScreenResult | null>(null);
+  const [isDragActive, setIsDragActive] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
   const utils = trpc.useUtils();
   const parse = trpc.orders.parse.useMutation({
     onSuccess: async (parsed) => { setResult(parsed); await utils.orders.history.invalidate(); toast.success(`${parsed.customers.length} customer ${parsed.customers.length === 1 ? "order is" : "orders are"} ready.`); },
@@ -39,6 +41,23 @@ export default function Home() {
   };
 
   const runParse = () => parse.mutate({ sourceText, ...(attachment ? { attachment: { filename: attachment.filename, mimeType: attachment.mimeType, dataUrl: attachment.dataUrl } } : {}) });
+  const handleDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (!event.dataTransfer.types.includes("Files") && event.dataTransfer.files.length === 0) return;
+    dragDepth.current += 1;
+    setIsDragActive(true);
+  };
+  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    dragDepth.current -= 1;
+    if (dragDepth.current <= 0) { dragDepth.current = 0; setIsDragActive(false); }
+  };
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    dragDepth.current = 0;
+    setIsDragActive(false);
+    selectAttachment(event.dataTransfer.files?.[0]);
+  };
 
   return <div className="mx-auto max-w-[1480px] text-[#1d2b22]">
     <header className="mb-8 flex flex-col gap-5 border-b border-[#e5e4dc] pb-7 lg:flex-row lg:items-end lg:justify-between">
@@ -47,8 +66,9 @@ export default function Home() {
     </header>
 
     <div className="grid gap-7 xl:grid-cols-[minmax(0,0.93fr)_minmax(0,1.07fr)]">
-      <section aria-label="Order source" className="self-start rounded-[26px] border border-[#e4e4dd] bg-white p-5 shadow-[0_14px_45px_-32px_rgba(26,49,32,0.34)] sm:p-7">
-        <div className="rounded-[22px] border border-[#d9ded5] bg-[#fafbf8] p-2 shadow-inner transition focus-within:border-[#79a568] focus-within:ring-4 focus-within:ring-[#dcebd0]">
+      <section aria-label="Order source" onDragEnter={handleDragEnter} onDragOver={event => event.preventDefault()} onDragLeave={handleDragLeave} onDrop={handleDrop} className="self-start rounded-[26px] border border-[#e4e4dd] bg-white p-5 shadow-[0_14px_45px_-32px_rgba(26,49,32,0.34)] sm:p-7">
+        <div className={`relative rounded-[22px] border bg-[#fafbf8] p-2 shadow-inner transition focus-within:ring-4 focus-within:ring-[#dcebd0] ${isDragActive ? "border-[#6d9d5d] ring-4 ring-[#dcebd0]" : "border-[#d9ded5] focus-within:border-[#79a568]"}`}>
+          {isDragActive && <div className="pointer-events-none absolute inset-2 z-20 flex flex-col items-center justify-center rounded-[17px] border-2 border-dashed border-[#6c995b] bg-[#eff8e7]/95 text-center shadow-sm"><Paperclip className="h-6 w-6 text-[#416c47]" /><p className="mt-2 text-sm font-semibold text-[#31583a]">Drop order file here</p><p className="mt-1 text-xs text-[#627c66]">Image, PDF, XLSX or XLS</p></div>}
           <Textarea id="order-text" value={sourceText} onChange={event => setSourceText(event.target.value)} onPaste={event => { const file = event.clipboardData.files[0]; if (file) { event.preventDefault(); selectAttachment(file); } }} placeholder={'Paste WhatsApp text here, or paste a screenshot.\n\nExample:\nBabar Ali\n4 ctn achha shred\nMF white 30'} className="min-h-[224px] resize-y border-0 bg-transparent p-4 font-mono text-[13px] leading-6 text-[#2b392e] placeholder:text-[#a2a9a1] focus-visible:ring-0" />
           <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.xlsx,.xls" className="hidden" onChange={event => selectAttachment(event.target.files?.[0])} />
           {attachment && <div className="mx-2 mb-2 flex items-center gap-3 rounded-xl border border-[#d5e5c9] bg-[#f3f8ed] p-2.5">{attachment.kind === "image" ? <img src={attachment.dataUrl} alt="Selected order attachment" className="h-10 w-10 rounded-lg object-cover" /> : <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-[#467752]">{attachment.kind === "pdf" ? <FileText className="h-5 w-5" /> : <FileSpreadsheet className="h-5 w-5" />}</div>}<div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{attachment.filename}</p><p className="mt-0.5 text-[11px] text-[#667867]">{attachment.kind === "xlsx" ? "Excel order data ready" : attachment.kind === "pdf" ? "PDF ready for parsing" : "Image ready for parsing"}</p></div><Button size="icon" variant="ghost" onClick={() => setAttachment(null)} className="h-8 w-8 rounded-lg text-[#6d776e] hover:bg-white hover:text-[#254f38]"><X className="h-4 w-4" /></Button></div>}
