@@ -67,7 +67,7 @@
 - [x] Add a Route-wise Orders workspace with one Excel smart-upload input.
 - [x] Group the uploaded sheet by route and show each route’s customers with their products.
 - [x] Add clear empty, invalid-column, and no-route-match states for the route report.
-- [ ] Save a checkpoint for the tested and visually verified route report.
+- [x] Save a checkpoint for the tested and visually verified route report.
 - [x] Make route report cards large, concise, and screenshot-shareable for sales-officer confirmation.
 - [x] Detect customer categories from the uploaded sheet and add a category filter alongside the route filter.
 - [x] Test combined route-and-category filtering with the supplied daily sales report.
