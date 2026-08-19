@@ -57,4 +57,30 @@ describe("AI structured-output retry", () => {
     expect(result.generalWarnings.join(" ")).not.toContain("carton-to-PKT conversion unknown");
     expect(invokeLLM.mock.calls[0]?.[0]?.messages[1]?.content[0]?.text).toContain("converts to 5 PKTS");
   });
+
+  it("uses high-detail image reading and preserves the final WhatsApp customer bubble", async () => {
+    const screenshotResult = JSON.stringify({
+      customers: [
+        { customerName: "Food trader township", sapLines: [{ fgCode: "FG-01-0042", qtyPkts: 40, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] },
+        { customerName: "Trade hub Pia Road", sapLines: [{ fgCode: "FG-01-0006", qtyPkts: 10, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] },
+        { customerName: "Baba Latif Johar town", sapLines: [{ fgCode: "FG-01-0042", qtyPkts: 20, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] },
+      ],
+      generalWarnings: [],
+      detectedBubbles: [
+        { customerName: "Food trader township", rawOrderText: "Acha Moz shredded 8 ctn" },
+        { customerName: "Trade hub Pia Road", rawOrderText: "Acha Moz blk 5 blk\nYellow slice 2 pkt" },
+        { customerName: "Baba Latif Johar town", rawOrderText: "Pizza Cheddar blk 5 pcs\nAcha Moz shredded 20 pcs" },
+        { customerName: "Nadeem Sb", rawOrderText: "EO Food\n25 ctn UK Shredd" },
+      ],
+    });
+    invokeLLM.mockResolvedValueOnce({ choices: [{ message: { content: screenshotResult } }] });
+
+    const result = await parseOrderWithAi({ sourceText: "", attachment: { kind: "image", filename: "whatsapp.png", mimeType: "image/png", dataUrl: "data:image/png;base64,AA==" }, masterUrl: "https://example.test/master" });
+
+    expect(result.customers.map(customer => customer.customerName)).toEqual(["Food trader township", "Trade hub Pia Road", "Baba Latif Johar town", "Nadeem Sb"]);
+    expect(result.customers[1]?.sapLines[0]?.qtyPkts).toBe(5);
+    expect(result.customers[3]?.warnings[0]).toContain("Order captured from the screenshot");
+    expect(invokeLLM.mock.calls[0]?.[0]?.messages[0]?.content).toContain("including the final bubble at the bottom");
+    expect(invokeLLM.mock.calls[0]?.[0]?.messages[1]?.content[1]?.image_url.detail).toBe("high");
+  });
 });

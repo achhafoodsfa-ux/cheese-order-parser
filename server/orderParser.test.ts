@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateLocal7030PktQuantity, enforceLocal7030ShreddedQuantity, extractLocal7030ShreddedTargets, formatCustomerSapBlock, formatSapLine, needsFullMasterLookup, normalizeParsedOrder, parseValidatedModelResult, recognizeLocal7030CartonPkts } from "./orderParser";
+import { calculateLocal7030PktQuantity, enforceAchhaMozBlockPhysicalQuantity, enforceLocal7030ShreddedQuantity, extractLocal7030ShreddedTargets, formatCustomerSapBlock, formatSapLine, needsFullMasterLookup, normalizeParsedOrder, parseValidatedModelResult, recognizeAchhaMozBlockPhysicalQty, recognizeLocal7030CartonPkts } from "./orderParser";
 
 describe("SAP order formatting", () => {
   it("renders the exact SAP row with two, five, then two tabs", () => {
@@ -71,5 +71,22 @@ describe("Local 70/30 product-first carton recognition", () => {
     ], generalWarnings: [] }, source);
     expect(corrected.customers[0]?.sapLines[0]?.qtyPkts).toBe(5);
     expect(corrected.customers[1]?.sapLines[0]?.qtyPkts).toBe(10);
+  });
+});
+
+describe("WhatsApp customer bubble preservation", () => {
+  it("keeps a readable customer with a warning instead of silently dropping a missed final order", () => {
+    const normalized = normalizeParsedOrder({ customers: [], generalWarnings: [], detectedBubbles: [{ customerName: "Nadeem Sb", rawOrderText: "EO Food 25 ctn UK Shredd" }] });
+    expect(normalized.customers).toEqual([{ customerName: "Nadeem Sb", sapLines: [], warnings: ["Order captured from the screenshot, but product matching needs verification before SAP rows can be created."] }]);
+  });
+});
+
+describe("Achha Mozz block physical quantities", () => {
+  it("keeps a block quantity as physical packets rather than converting it as a carton", () => {
+    expect(recognizeAchhaMozBlockPhysicalQty("Acha Moz blk 5 blk")).toBe(5);
+    expect(recognizeAchhaMozBlockPhysicalQty("Achha Moz block 5")).toBe(5);
+    expect(recognizeAchhaMozBlockPhysicalQty("Achha Moz block 2 ctn")).toBeUndefined();
+    const corrected = enforceAchhaMozBlockPhysicalQuantity({ customers: [{ customerName: "Trade hub Pia Road", sapLines: [{ fgCode: "FG-01-0006", qtyPkts: 10, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] }], generalWarnings: [], detectedBubbles: [{ customerName: "Trade hub Pia Road", rawOrderText: "Acha Moz blk 5 blk" }] }, "");
+    expect(corrected.customers[0]?.sapLines[0]?.qtyPkts).toBe(5);
   });
 });

@@ -11,7 +11,13 @@ export type ParsedCustomerOrder = {
   warnings: string[];
 };
 
+export type DetectedOrderBubble = {
+  customerName: string;
+  rawOrderText: string;
+};
+
 export type ParsedOrderResult = {
   customers: ParsedCustomerOrder[];
   generalWarnings: string[];
+  detectedBubbles: DetectedOrderBubble[];
 };

@@ -36,3 +36,10 @@
 - [x] Test incorrect model output against the deterministic Local 70/30 shredded conversion rule, then save a checkpoint.
 - [x] Enforce Local 70/30 shredded conversion independently for each recognized customer section and source line.
 - [x] Add multi-customer Local 70/30 regression coverage before saving the final correction checkpoint.
+- [x] Capture every visible WhatsApp customer message in screenshot parsing, including the final message bubble.
+- [x] Treat Achha Mozz block quantities such as "5 blk" as five physical PKT/PCS, not cartons.
+- [x] Start parsing when Enter is pressed in the smart input; keep Shift+Enter for a new line.
+- [x] Test the updated screenshot parsing and keyboard-submit behavior, then save a checkpoint.
+- [x] Preserve every screenshot-detected WhatsApp bubble as a customer block or a visible warning instead of silently losing a final order.
+- [x] Enforce Achha Mozz physical block quantities in final SAP output for text and screenshot-driven parsing.
+- [x] Add regression coverage for the four-bubble WhatsApp order and final screenshot customer, then save a checkpoint.
