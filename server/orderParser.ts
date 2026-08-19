@@ -155,15 +155,52 @@ export function recognizeLocal7030CartonPkts(sourceText: string): number | undef
 
 export function calculateLocal7030PktQuantity(sourceText: string): number | undefined {
   const ratio = recognizeLocal7030CartonPkts(sourceText);
-  const cartonMatch = sourceText.match(/\b(\d+)\s*(?:ctn|carton|box)\b/i);
+  const localLine = sourceText.split(/\r?\n/).find(line => /local\s*70\s*\/\s*30|local 7030/i.test(line)) || sourceText;
+  const cartonMatch = localLine.match(/\b(\d+)\s*(?:ctn|carton|box)\b/i);
   if (!ratio || !cartonMatch) return undefined;
   return Number(cartonMatch[1]) * ratio;
+}
+
+type Local7030Target = { customerName?: string; qtyPkts: number };
+
+function normalizeCustomerKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+export function extractLocal7030ShreddedTargets(sourceText: string): Local7030Target[] {
+  const lines = sourceText.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  return lines.flatMap((line, index) => {
+    if (!/local\s*70\s*\/\s*30|local 7030/i.test(line) || /\bblock\b|\bslices?\b|\b1\s*kg\b/i.test(line)) return [];
+    const qtyPkts = calculateLocal7030PktQuantity(line);
+    if (!qtyPkts) return [];
+    const customerName = lines.slice(0, index).reverse().find(candidate => !/\b\d+\s*(?:ctn|carton|box)\b|\b(local|70\s*\/\s*30)\b/i.test(candidate));
+    return [{ customerName, qtyPkts }];
+  });
+}
+
+export function enforceLocal7030ShreddedQuantity(result: ParsedOrderResult, sourceText: string): ParsedOrderResult {
+  const targets = extractLocal7030ShreddedTargets(sourceText);
+  if (!targets.length) return result;
+  const quantitiesByCustomer = new Map<string, number>();
+  targets.forEach(target => {
+    const key = target.customerName ? normalizeCustomerKey(target.customerName) : "";
+    quantitiesByCustomer.set(key, (quantitiesByCustomer.get(key) || 0) + target.qtyPkts);
+  });
+
+  return {
+    ...result,
+    customers: result.customers.map(customer => {
+      const customerQtyPkts = quantitiesByCustomer.get(normalizeCustomerKey(customer.customerName)) ?? (result.customers.length === 1 && targets.length === 1 ? targets[0]?.qtyPkts : undefined);
+      if (!customerQtyPkts) return customer;
+      return { ...customer, sapLines: customer.sapLines.map(line => line.fgCode === "FG-03-0018" ? { ...line, qtyPkts: customerQtyPkts } : line) };
+    }),
+  };
 }
 
 export async function parseOrderWithAi(input: { sourceText: string; attachment?: ParserAttachment; masterUrl: string; learnedRules?: string[] }): Promise<ParsedOrderResult> {
   const recognizedLocal7030Ratio = recognizeLocal7030CartonPkts(input.sourceText);
   const calculatedLocal7030Pkts = calculateLocal7030PktQuantity(input.sourceText);
-  const local7030Hint = recognizedLocal7030Ratio ? `\n\nPRODUCT-FIRST LOCAL 70/30 HINT: This source contains Local 70/30. Use ${recognizedLocal7030Ratio} PKTS per CTN after identifying its style${calculatedLocal7030Pkts ? `; the stated carton quantity converts to ${calculatedLocal7030Pkts} PKTS` : ""}. Do not report an unknown carton ratio.` : "";
+  const local7030Hint = recognizedLocal7030Ratio ? `\n\nPRODUCT-FIRST LOCAL 70/30 HINT: This source contains Local 70/30. Use ${recognizedLocal7030Ratio} PKTS per CTN after identifying its style${calculatedLocal7030Pkts ? `; the stated carton quantity converts to ${calculatedLocal7030Pkts} PKTS` : ""}. Do not report an unknown carton ratio. For Local 70/30 Shredded 2KG, 5 PKTS per CTN is non-negotiable and the server will validate this quantity.` : "";
   const userContent: Array<
     { type: "text"; text: string }
     | { type: "image_url"; image_url: { url: string; detail: "auto" | "high" } }
@@ -224,11 +261,11 @@ export async function parseOrderWithAi(input: { sourceText: string; attachment?:
 
   const primaryModel = input.attachment?.kind === "image" ? "gemini-3-flash-preview" : "gpt-5-mini";
   const primaryResult = await requestStructuredParse(primaryModel, false);
-  if (primaryResult && !needsFullMasterLookup(primaryResult)) return primaryResult;
+  if (primaryResult && !needsFullMasterLookup(primaryResult)) return enforceLocal7030ShreddedQuantity(primaryResult, input.sourceText);
 
   const fallbackModel = primaryModel === "gpt-5-mini" ? "gemini-3-flash-preview" : "gpt-5-mini";
   const retryResult = await requestStructuredParse(fallbackModel, true);
-  if (retryResult) return retryResult;
+  if (retryResult) return enforceLocal7030ShreddedQuantity(retryResult, input.sourceText);
 
   throw new Error("This order could not be safely read. Please resend a sharper screenshot or paste the text; no incomplete SAP order was created.");
 }

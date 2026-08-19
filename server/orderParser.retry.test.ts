@@ -46,7 +46,7 @@ describe("AI structured-output retry", () => {
 
   it("handles the reported Local 70/30 carton order without an unknown-ratio warning", async () => {
     const localOrder = JSON.stringify({
-      customers: [{ customerName: "Local Customer", sapLines: [{ fgCode: "FG-03-0018", qtyPkts: 5, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] }],
+      customers: [{ customerName: "Local Customer", sapLines: [{ fgCode: "FG-03-0018", qtyPkts: 1, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] }],
       generalWarnings: [],
     });
     invokeLLM.mockResolvedValueOnce({ choices: [{ message: { content: localOrder } }] });

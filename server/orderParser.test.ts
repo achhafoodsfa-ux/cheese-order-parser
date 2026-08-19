@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateLocal7030PktQuantity, formatCustomerSapBlock, formatSapLine, needsFullMasterLookup, normalizeParsedOrder, parseValidatedModelResult, recognizeLocal7030CartonPkts } from "./orderParser";
+import { calculateLocal7030PktQuantity, enforceLocal7030ShreddedQuantity, extractLocal7030ShreddedTargets, formatCustomerSapBlock, formatSapLine, needsFullMasterLookup, normalizeParsedOrder, parseValidatedModelResult, recognizeLocal7030CartonPkts } from "./orderParser";
 
 describe("SAP order formatting", () => {
   it("renders the exact SAP row with two, five, then two tabs", () => {
@@ -55,5 +55,21 @@ describe("Local 70/30 product-first carton recognition", () => {
     expect(calculateLocal7030PktQuantity("01 ctn Local 70/30 2KG")).toBe(5);
     expect(calculateLocal7030PktQuantity("02 ctn Local 70/30 block")).toBe(20);
     expect(calculateLocal7030PktQuantity("03 ctn Local 70/30 slices")).toBe(54);
+  });
+
+  it("overrides an incorrect AI shredded quantity with exactly five packets per carton", () => {
+    const corrected = enforceLocal7030ShreddedQuantity({ customers: [{ customerName: "Customer", sapLines: [{ fgCode: "FG-03-0018", qtyPkts: 1, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] }], generalWarnings: [] }, "01 ctn Local 70/30 2KG shredded");
+    expect(corrected.customers[0]?.sapLines[0]?.qtyPkts).toBe(5);
+  });
+
+  it("applies Local 70/30 shredded carton conversions independently for multiple customers", () => {
+    const source = "Alpha Foods\n01 ctn Local 70/30 2KG shredded\n\nBeta Foods\n02 ctn Local 70/30 2KG shredded";
+    expect(extractLocal7030ShreddedTargets(source)).toEqual([{ customerName: "Alpha Foods", qtyPkts: 5 }, { customerName: "Beta Foods", qtyPkts: 10 }]);
+    const corrected = enforceLocal7030ShreddedQuantity({ customers: [
+      { customerName: "Alpha Foods", sapLines: [{ fgCode: "FG-03-0018", qtyPkts: 1, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] },
+      { customerName: "Beta Foods", sapLines: [{ fgCode: "FG-03-0018", qtyPkts: 2, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [] },
+    ], generalWarnings: [] }, source);
+    expect(corrected.customers[0]?.sapLines[0]?.qtyPkts).toBe(5);
+    expect(corrected.customers[1]?.sapLines[0]?.qtyPkts).toBe(10);
   });
 });

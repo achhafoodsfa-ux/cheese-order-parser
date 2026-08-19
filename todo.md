@@ -32,3 +32,7 @@
 - [x] Recognize Local 70/30 product style before calculating CTN-to-PKT quantities.
 - [x] Apply Local 70/30 carton rules: Shredded 5 PKT/CTN, Block 10 PKT/CTN, Slices 18 PKT/CTN.
 - [x] Test the Local 70/30 recognition and conversion correction, then save a checkpoint.
+- [x] Enforce Local 70/30 shredded 2KG as exactly 5 PKT per CTN server-side, even if an AI response is wrong.
+- [x] Test incorrect model output against the deterministic Local 70/30 shredded conversion rule, then save a checkpoint.
+- [x] Enforce Local 70/30 shredded conversion independently for each recognized customer section and source line.
+- [x] Add multi-customer Local 70/30 regression coverage before saving the final correction checkpoint.
