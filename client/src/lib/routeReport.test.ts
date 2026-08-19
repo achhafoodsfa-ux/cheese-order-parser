@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRouteReportFromRows, filterRouteCustomers } from "./routeReport";
+import { buildRouteMatrix, buildRouteReportFromRows, filterRouteCustomers } from "./routeReport";
 
 const sourceRows = [
   ["SO Num", "Cst Code", "Cst Name", "Cst Group", "Route", "", "Total Units", "", ""],
@@ -24,6 +24,17 @@ describe("route report spreadsheet grouping", () => {
     const report = buildRouteReportFromRows(sourceRows);
     expect(filterRouteCustomers(report, "V1-Lahore", "CFS - Corporate").map(customer => customer.customerName)).toEqual(["Alpha Foods"]);
     expect(filterRouteCustomers(report, "V1-Lahore", "CFS - Distributer")).toEqual([]);
+  });
+
+  it("creates one compact matrix with only the products ordered in the selected route", () => {
+    const report = buildRouteReportFromRows(sourceRows);
+    const matrix = buildRouteMatrix(filterRouteCustomers(report, "V1-Lahore", "all"));
+    expect(matrix.customers).toHaveLength(1);
+    expect(matrix.totalUnits).toBe(6);
+    expect(matrix.products).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "FG-01-0006", totalUnits: 3 }),
+      expect.objectContaining({ code: "FG-03-0018", totalUnits: 3 }),
+    ]));
   });
 
   it("explains when a sheet does not contain the required route/customer columns", () => {

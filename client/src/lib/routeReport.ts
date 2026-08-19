@@ -97,6 +97,29 @@ export function filterRouteCustomers(report: RouteReport, route: string, categor
   return report.customers.filter(customer => (route === "all" || customer.route === route) && (category === "all" || customer.category === category));
 }
 
+export type RouteMatrixProduct = RouteProduct & { totalUnits: number };
+
+export type RouteMatrix = {
+  customers: RouteCustomer[];
+  products: RouteMatrixProduct[];
+  totalUnits: number;
+};
+
+export function buildRouteMatrix(customers: RouteCustomer[]): RouteMatrix {
+  const totals = new Map<string, RouteMatrixProduct>();
+  customers.forEach(customer => customer.products.forEach(product => {
+    const key = product.code ?? product.name;
+    const existing = totals.get(key);
+    if (existing) existing.totalUnits += product.quantity;
+    else totals.set(key, { ...product, totalUnits: product.quantity });
+  }));
+  return {
+    customers,
+    products: Array.from(totals.values()).sort((a, b) => a.name.localeCompare(b.name)),
+    totalUnits: customers.reduce((total, customer) => total + customer.totalUnits, 0),
+  };
+}
+
 export function formatUnits(value: number) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
 }

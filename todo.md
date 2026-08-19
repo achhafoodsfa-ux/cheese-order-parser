@@ -74,3 +74,6 @@
 - [x] Make the selected route the primary report view instead of showing multiple routes together.
 - [x] Present every selected-route customer and product in one consolidated, continuous share board.
 - [x] Save a checkpoint for the tested single-route screenshot layout.
+- [x] Replace per-customer cards with a compact selected-route matrix: customers as rows and products as columns.
+- [x] Show only products ordered in the selected route, with per-customer quantities and a compact route total.
+- [ ] Save a checkpoint for the tested one-page matrix layout against the supplied daily sales report.
