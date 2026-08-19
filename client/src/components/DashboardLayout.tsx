@@ -5,7 +5,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { ClipboardPenLine, FileSpreadsheet, LogOut, PanelLeft, Sparkles } from "lucide-react";
+import { ClipboardPenLine, FileSpreadsheet, LogOut, MapPinned, PanelLeft, Sparkles } from "lucide-react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
@@ -13,6 +13,7 @@ import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 const menuItems = [
   { icon: ClipboardPenLine, label: "New parse", path: "/" },
   { icon: FileSpreadsheet, label: "Stock sheet", path: "/stock-sheet" },
+  { icon: MapPinned, label: "Route-wise orders", path: "/route-orders" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "cheese-parser-sidebar-width";
@@ -36,7 +37,7 @@ function SignInScreen() {
     <div className="w-full max-w-md rounded-[28px] border border-[#e6e5df] bg-white p-9 shadow-[0_20px_60px_-28px_rgba(23,32,22,0.24)] text-center">
       <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#124e37] text-white"><ClipboardPenLine className="h-6 w-6" /></div>
       <h1 className="text-2xl font-semibold tracking-tight text-[#1d2b22]">Cheese Order Parser</h1>
-      <p className="mt-3 text-sm leading-6 text-[#687067]">Sign in to securely parse, save, and revisit customer-specific SAP orders.</p>
+      <p className="mt-3 text-sm leading-6 text-[#687067]">Sign in to parse orders and review route-wise customer products securely.</p>
       <Button onClick={() => startLogin()} className="mt-7 h-11 w-full rounded-xl bg-[#124e37] hover:bg-[#0e402e]">Sign in to workspace</Button>
     </div>
   </div>;
