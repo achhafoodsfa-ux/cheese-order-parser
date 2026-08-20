@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateBroadway2KgPieces, calculateLocal7030PktQuantity, enforceAchhaMozBlockPhysicalQuantity, enforceBroadwayBranchQuantities, enforceLocal7030ShreddedQuantity, enforcePizzaCheddarBlockPhysicalQuantity, extractLocal7030ShreddedTargets, formatCustomerSapBlock, formatSapLine, identifyPizzaCheddarBlock, needsFullMasterLookup, normalizeParsedOrder, normalizePlacementRoute, parseValidatedModelResult, recognizeAchhaMozBlockPhysicalQty, recognizeLocal7030CartonPkts, recognizePizzaCheddarBlockPhysicalQty } from "./orderParser";
+import { calculateBroadway2KgPieces, calculateLocal7030PktQuantity, countDenseProductCandidateRows, enforceAchhaMozBlockPhysicalQuantity, enforceBroadwayBranchQuantities, enforceDenseScreenshotCompletenessWarnings, enforceLocal7030ShreddedQuantity, enforcePizzaCheddarBlockPhysicalQuantity, extractLocal7030ShreddedTargets, formatCustomerSapBlock, formatSapLine, identifyPizzaCheddarBlock, needsFullMasterLookup, normalizeParsedOrder, normalizePlacementRoute, parseValidatedModelResult, recognizeAchhaMozBlockPhysicalQty, recognizeLocal7030CartonPkts, recognizePizzaCheddarBlockPhysicalQty } from "./orderParser";
 
 describe("SAP order formatting", () => {
   it("renders the exact SAP row with two, five, then two tabs", () => {
@@ -102,6 +102,27 @@ describe("WhatsApp customer bubble preservation", () => {
     expect(parsed.detectedBubbles).toHaveLength(2);
     expect(formatCustomerSapBlock(parsed.customers[0]!)).toBe("FG-03-0018\t\t15\t\t\t\t\tHO-WH\t\tCHEESE");
     expect(normalizePlacementRoute("please add in v 12")).toBe("V12");
+  });
+
+  it("adds a visible warning when the supplied dense screenshot bubble has more product rows than matched SAP rows", () => {
+    const rawOrderText = "Top Cow white Dice 15pkt\nRed mozzarella block 10\nPizza Chaddar blue 10\n70/30 local 10\nWhite 10 pkt 800 g\nYellow cheese 800 garm 10 Pkt";
+    expect(countDenseProductCandidateRows(rawOrderText)).toBe(6);
+    const protectedResult = enforceDenseScreenshotCompletenessWarnings({
+      customers: [{
+        customerName: "Shahzad shopping",
+        sapLines: [
+          { fgCode: "FG-02-0048", qtyPkts: 15, warehouse: "HO-WH", productGroup: "CHEESE" },
+          { fgCode: "FG-03-0018", qtyPkts: 50, warehouse: "HO-WH", productGroup: "CHEESE" },
+          { fgCode: "FG-02-0037", qtyPkts: 10, warehouse: "HO-WH", productGroup: "CHEESE" },
+          { fgCode: "FG-02-0038", qtyPkts: 10, warehouse: "HO-WH", productGroup: "CHEESE" },
+        ],
+        warnings: ["Pizza cheddar blue needs exact master verification."],
+      }],
+      generalWarnings: [],
+      detectedBubbles: [{ customerName: "Shahzad shopping", rawOrderText }],
+    });
+    expect(protectedResult.customers[0]?.warnings).toHaveLength(2);
+    expect(protectedResult.customers[0]?.warnings[1]).toContain("1 readable product row");
   });
 });
 

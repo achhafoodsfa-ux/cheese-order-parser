@@ -97,3 +97,11 @@
 - [x] Treat each non-zero Broadway branch as a separate customer order and skip zero-quantity branches.
 - [x] Convert Broadway KG values into the correct physical PCS/PKTS using the confirmed Broadway pack weight and official FG mapping.
 - [x] Save a checkpoint for the tested Broadway branch-sheet parsing regression.
+- [ ] Parse every visible customer bubble in dense WhatsApp screenshots as a separate order block.
+- [ ] Preserve every readable product line and quantity inside each customer bubble, including mixed multi-line orders.
+- [ ] Add completeness warnings rather than silently omitting unreadable or unmatched product lines.
+- [ ] Add regression coverage for the supplied dense seven-customer WhatsApp screenshot, including its mixed multi-line product rows.
+- [ ] Save a checkpoint for the tested dense seven-customer WhatsApp screenshot regression.
+- [ ] Validate the updated parser against the supplied dense WhatsApp screenshot and confirm every visible customer bubble is captured.
+- [ ] Add a regression fixture based on the supplied dense screenshot that asserts mixed multi-line product rows remain in their own customer block.
+- [ ] Verify that any unreadable or unmatched dense-screenshot product line surfaces as a visible customer warning.

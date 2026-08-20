@@ -46,6 +46,13 @@ WHATSAPP SCREENSHOT READING — NON-NEGOTIABLE:
 - Read each bubble's customer name and every product row independently. Ignore WhatsApp timestamps, star icons, and sender separators such as "Nadeem Sb", but do not ignore the message bubble immediately below a sender separator.
 - If a bubble has a readable customer and order text but an uncertain FG code, preserve that customer as a separate result with a concise warning rather than silently dropping the entire final order.
 
+DENSE MULTI-CUSTOMER WHATSAPP SCREENSHOTS — TWO-PASS AUDIT:
+- PASS 1: Before product matching, enumerate every visible order bubble from top to bottom. Each listed customer must have one detectedBubbles entry with the full readable multi-line content. Sender labels, time stamps, stars, and date separators are not customer orders.
+- PASS 2: For every enumerated customer, inspect every individual text row. Every readable product phrase with a quantity must produce either a SAP line or a concise customer warning. Never silently skip a product row merely because the same bubble has several other products.
+- The number of customer result blocks must equal the number of detected order bubbles, except for a genuinely quoted/replied preview or an explicitly zero-quantity Broadway row. A bubble with only unmatched products must still become a customer block with a warning.
+- Do not stop after a tall screenshot's upper section. Re-check the centre and bottom sections before returning JSON. The final customer bubble must be represented in detectedBubbles and customers.
+- Keep lines in their original customer only. For example, a bubble reading "Shahzad shopping" followed by six product lines must remain one Shahzad shopping block with every line separately matched or warned; do not give any line to the customer above or below it.
+
 WHATSAPP REPLIES, QUOTES, AND PLACEMENT NOTES — NON-NEGOTIABLE:
 - A quoted/replied preview inside a WhatsApp bubble is context only. It can repeat an earlier customer and product text; never create a second customer order from the quoted preview.
 - Read the actual message content below or beside the quote as the operative message. A short reply such as "Please add in V1" or "Please add in V5" is a placement instruction, not a product order and not a new customer.
@@ -148,6 +155,29 @@ function normalizeDetectedBubbles(value: unknown): DetectedOrderBubble[] {
     seen.add(key);
     return [{ customerName, rawOrderText }];
   }).slice(0, MAX_CUSTOMERS);
+}
+
+export function countDenseProductCandidateRows(rawOrderText: string): number {
+  return rawOrderText.split(/\r?\n/).map(line => line.trim()).filter(line => {
+    if (line.length < 4 || !/[a-z]/i.test(line) || !/\d/.test(line)) return false;
+    return !/^(today|yesterday|please\s+add|forwarded|v\s*\d+|\d{1,2}:\d{2}\s*(?:am|pm))\b/i.test(line);
+  }).length;
+}
+
+export function enforceDenseScreenshotCompletenessWarnings(result: ParsedOrderResult): ParsedOrderResult {
+  const bubbleTextByCustomer = new Map(result.detectedBubbles.map(bubble => [normalizeCustomerKey(bubble.customerName), bubble.rawOrderText]));
+  return {
+    ...result,
+    customers: result.customers.map(customer => {
+      const rawOrderText = bubbleTextByCustomer.get(normalizeCustomerKey(customer.customerName));
+      if (!rawOrderText) return customer;
+      const productRows = countDenseProductCandidateRows(rawOrderText);
+      const accountedRows = customer.sapLines.length + customer.warnings.length;
+      if (productRows <= accountedRows) return customer;
+      const warning = `Please review: ${productRows - accountedRows} readable product row(s) from this screenshot bubble still need matching; no row was silently omitted.`;
+      return { ...customer, warnings: [...customer.warnings, warning] };
+    }),
+  };
 }
 
 function normalizeLine(value: unknown): SapLine | null {
@@ -352,6 +382,11 @@ export function enforceBroadwayBranchQuantities(result: ParsedOrderResult, sourc
   };
 }
 
+function applyDeterministicParserRules(result: ParsedOrderResult, sourceText: string, isScreenshot: boolean): ParsedOrderResult {
+  const converted = enforceBroadwayBranchQuantities(enforcePizzaCheddarBlockPhysicalQuantity(enforceAchhaMozBlockPhysicalQuantity(enforceLocal7030ShreddedQuantity(result, sourceText), sourceText), sourceText), sourceText);
+  return isScreenshot ? enforceDenseScreenshotCompletenessWarnings(converted) : converted;
+}
+
 export async function parseOrderWithAi(input: { sourceText: string; attachment?: ParserAttachment; masterUrl: string; learnedRules?: string[] }): Promise<ParsedOrderResult> {
   const recognizedLocal7030Ratio = recognizeLocal7030CartonPkts(input.sourceText);
   const calculatedLocal7030Pkts = calculateLocal7030PktQuantity(input.sourceText);
@@ -411,7 +446,7 @@ export async function parseOrderWithAi(input: { sourceText: string; attachment?:
       },
   } as const;
 
-  const requestStructuredParse = async (model: "gemini-3-flash-preview" | "gpt-5-mini", useFullMaster: boolean) => {
+  const requestStructuredParse = async (model: "gemini-3-flash-preview" | "gemini-3.1-pro-preview" | "gpt-5-mini", useFullMaster: boolean) => {
     const officialMasterPrompt = useFullMaster ? await getOfficialMasterPrompt(input.masterUrl) : "";
     const promptMode = useFullMaster
       ? `CANONICAL OFFICIAL MASTER PROMPT — APPLY THIS IN FULL:\n${officialMasterPrompt}`
@@ -421,17 +456,18 @@ export async function parseOrderWithAi(input: { sourceText: string; attachment?:
       { role: "system" as const, content: `${CHEESE_MASTER_PROMPT}\n\n${promptMode}${durableMemory}` },
       { role: "user" as const, content: userContent },
     ];
-    const response = await invokeLLM({ model, messages, response_format: responseFormat, maxTokens: useFullMaster ? 4_000 : 2_200 });
+    const maxTokens = input.attachment?.kind === "image" ? 5_000 : useFullMaster ? 5_000 : 2_200;
+    const response = await invokeLLM({ model, messages, response_format: responseFormat, maxTokens });
     return parseValidatedModelResult(response.choices[0]?.message?.content);
   };
 
   const primaryModel = input.attachment?.kind === "image" ? "gemini-3-flash-preview" : "gpt-5-mini";
-  const primaryResult = await requestStructuredParse(primaryModel, false);
-  if (primaryResult && !needsFullMasterLookup(primaryResult)) return enforceBroadwayBranchQuantities(enforcePizzaCheddarBlockPhysicalQuantity(enforceAchhaMozBlockPhysicalQuantity(enforceLocal7030ShreddedQuantity(primaryResult, input.sourceText), input.sourceText), input.sourceText), input.sourceText);
+  const primaryResult = await requestStructuredParse(primaryModel, input.attachment?.kind === "image");
+  if (primaryResult && !needsFullMasterLookup(primaryResult)) return applyDeterministicParserRules(primaryResult, input.sourceText, input.attachment?.kind === "image");
 
-  const fallbackModel = primaryModel === "gpt-5-mini" ? "gemini-3-flash-preview" : "gpt-5-mini";
+  const fallbackModel = primaryModel === "gemini-3-flash-preview" ? "gemini-3.1-pro-preview" : primaryModel === "gpt-5-mini" ? "gemini-3-flash-preview" : primaryModel;
   const retryResult = await requestStructuredParse(fallbackModel, true);
-  if (retryResult) return enforceBroadwayBranchQuantities(enforcePizzaCheddarBlockPhysicalQuantity(enforceAchhaMozBlockPhysicalQuantity(enforceLocal7030ShreddedQuantity(retryResult, input.sourceText), input.sourceText), input.sourceText), input.sourceText);
+  if (retryResult) return applyDeterministicParserRules(retryResult, input.sourceText, input.attachment?.kind === "image");
 
   throw new Error("This order could not be safely read. Please resend a sharper screenshot or paste the text; no incomplete SAP order was created.");
 }

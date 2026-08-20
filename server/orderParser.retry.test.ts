@@ -83,6 +83,7 @@ describe("AI structured-output retry", () => {
     expect(result.customers[3]?.warnings[0]).toContain("Order captured from the screenshot");
     expect(invokeLLM.mock.calls[0]?.[0]?.messages[0]?.content).toContain("including the final bubble at the bottom");
     expect(invokeLLM.mock.calls[0]?.[0]?.messages[1]?.content[1]?.image_url.detail).toBe("high");
+    expect(invokeLLM.mock.calls[0]?.[0]).toMatchObject({ model: "gemini-3-flash-preview", maxTokens: 5_000 });
   });
 
   it("removes a quoted preview duplicate and keeps V1/V5 outside unchanged strict SAP rows", async () => {
@@ -134,5 +135,39 @@ describe("AI structured-output retry", () => {
     expect(result.customers.map(customer => customer.sapLines[0]?.qtyPkts)).toEqual([55, 65]);
     expect(result.customers.some(customer => /kohinoor|multan/i.test(customer.customerName))).toBe(false);
     expect(invokeLLM.mock.calls[0]?.[0]?.messages[0]?.content).toContain("BROADWAY MULTI-BRANCH KG ALLOCATION SHEETS");
+  });
+
+  it("keeps every customer and every readable product row from a dense multi-bubble WhatsApp screenshot", async () => {
+    const denseScreenshotResult = JSON.stringify({
+      customers: [
+        { customerName: "Resto mart gulbarg", sapLines: [{ fgCode: "FG-01-0042", qtyPkts: 10, warehouse: "HO-WH", productGroup: "CHEESE" }, { fgCode: "FG-03-0024", qtyPkts: 5, warehouse: "HO-WH", productGroup: "CHEESE" }, { fgCode: "FG-03-0018", qtyPkts: 5, warehouse: "HO-WH", productGroup: "CHEESE" }, { fgCode: "FG-02-0051", qtyPkts: 10, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: ["50/50 product weight requires review before final dispatch."], placementRoute: "" },
+        { customerName: "Clifton grill ghalib market", sapLines: [{ fgCode: "FG-02-0036", qtyPkts: 5, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [], placementRoute: "" },
+        { customerName: "Juicy chuck gulbarg", sapLines: [{ fgCode: "FG-01-0042", qtyPkts: 10, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [], placementRoute: "" },
+        { customerName: "Shahzad shopping", sapLines: [{ fgCode: "FG-02-0006", qtyPkts: 10, warehouse: "HO-WH", productGroup: "CHEESE" }, { fgCode: "FG-03-0018", qtyPkts: 50, warehouse: "HO-WH", productGroup: "CHEESE" }, { fgCode: "FG-02-0037", qtyPkts: 10, warehouse: "HO-WH", productGroup: "CHEESE" }, { fgCode: "FG-02-0038", qtyPkts: 10, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: ["Pizza cheddar blue needs exact master verification."], placementRoute: "" },
+        { customerName: "Spice n olive canal park", sapLines: [{ fgCode: "FG-02-0038", qtyPkts: 15, warehouse: "HO-WH", productGroup: "CHEESE" }, { fgCode: "FG-03-0018", qtyPkts: 35, warehouse: "HO-WH", productGroup: "CHEESE" }, { fgCode: "FG-01-0042", qtyPkts: 20, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [], placementRoute: "" },
+        { customerName: "Chuck n cheese ghazi road", sapLines: [{ fgCode: "FG-02-0048", qtyPkts: 3, warehouse: "HO-WH", productGroup: "CHEESE" }, { fgCode: "FG-02-0028", qtyPkts: 1, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [], placementRoute: "" },
+        { customerName: "Tahir brother Dha", sapLines: [{ fgCode: "FG-03-0018", qtyPkts: 50, warehouse: "HO-WH", productGroup: "CHEESE" }, { fgCode: "FG-01-0042", qtyPkts: 30, warehouse: "HO-WH", productGroup: "CHEESE" }], warnings: [], placementRoute: "" },
+      ],
+      generalWarnings: [],
+      detectedBubbles: [
+        { customerName: "Resto mart gulbarg", rawOrderText: "Acha Mozzarella Shredded 1 ctn\n50/50 Cheese 1 ctn\n70/30 local 1 ctn\n70/30 New 2 ctn" },
+        { customerName: "Clifton grill ghalib market", rawOrderText: "1 ctn classic Mozzarella shred" },
+        { customerName: "Juicy chuck gulbarg", rawOrderText: "10 pkt Acha mozzarella shred" },
+        { customerName: "Shahzad shopping", rawOrderText: "Top cow White Dice 15pkt\nRed mozzarella block 10\nPizza cheddar blue 10\n70/30 local 10\nWhite 10 pkt 800 g\nYellow cheese 800 garm 10 pkt" },
+        { customerName: "Spice n olive canal park", rawOrderText: "slices yellow 3ctn\n70/30 7ctn local\nAcha Shared mozzarella 4ctn" },
+        { customerName: "Chuck n cheese ghazi road", rawOrderText: "3 packet top cow mozzarella shared\n1 packet yellow slice" },
+        { customerName: "Tahir brother Dha", rawOrderText: "70/30 local 10pcs\nAcha mozzarella shred 30pes" },
+      ],
+    });
+    invokeLLM.mockResolvedValueOnce({ choices: [{ message: { content: denseScreenshotResult } }] });
+
+    const result = await parseOrderWithAi({ sourceText: "", attachment: { kind: "image", filename: "dense-orders.png", mimeType: "image/png", dataUrl: "data:image/png;base64,AA==" }, masterUrl: "https://example.test/master" });
+
+    expect(result.customers).toHaveLength(7);
+    expect(result.detectedBubbles).toHaveLength(7);
+    expect(result.customers.find(customer => customer.customerName === "Shahzad shopping")?.sapLines).toHaveLength(4);
+    expect(result.customers.find(customer => customer.customerName === "Tahir brother Dha")?.sapLines.map(line => line.qtyPkts)).toEqual([50, 30]);
+    expect(invokeLLM.mock.calls[0]?.[0]?.messages[0]?.content).toContain("DENSE MULTI-CUSTOMER WHATSAPP SCREENSHOTS");
+    expect(invokeLLM.mock.calls[0]?.[0]).toMatchObject({ model: "gemini-3-flash-preview", maxTokens: 5_000 });
   });
 });
